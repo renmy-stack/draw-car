@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#7fc8ff">
+<meta property="og:title" content="ドローカーレース">
+<meta property="og:description" content="タイヤを描いて、障害物コースを走らせよう。ゴールまでのタイムで勝負！">
+<title>ドローカーレース</title>
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<canvas id="race"></canvas>
+
+<div id="top">
+  <div id="courses">
+    <button class="cbtn" data-c="0">1</button>
+    <button class="cbtn" data-c="1">2</button>
+    <button class="cbtn" data-c="2">3</button>
+  </div>
+  <div id="cname"><span id="cname-text">はらっぱ</span><span id="cbest"></span></div>
+  <div id="timer">0.00</div>
+</div>
+
+<div id="padwrap">
+  <div id="padhint">タイヤを かいてね</div>
+  <canvas id="pad" width="300" height="180"></canvas>
+  <div id="padbtns">
+    <button id="clear" class="sub">けす</button>
+    <button id="start" class="main" hidden>スタート</button>
+    <button id="retry" class="sub" hidden>やりなおし</button>
+  </div>
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <div class="rtitle">🏁 ゴール！</div>
+    <div class="rcourse" id="rcourse">コース1 はらっぱ</div>
+    <div class="rtime"><span id="rtime">0.00</span><span class="unit">秒</span></div>
+    <div class="rbest" id="rbest"></div>
+    <div class="rbtns">
+      <button id="share" class="main">シェア</button>
+      <button id="again" class="sub">もう一度</button>
+      <button id="next" class="sub">つぎのコース</button>
+    </div>
+  </div>
+</div>
+
+<div id="sharebox" hidden>
+  <div class="panel">
+    <img id="shareimg" alt="結果の画像">
+    <div class="note">画像を長押しで保存できます</div>
+    <textarea id="sharetext" readonly></textarea>
+    <div class="rbtns">
+      <button id="copy" class="main">文をコピー</button>
+      <button id="closeshare" class="sub">とじる</button>
+    </div>
+  </div>
+</div>
+
+<script src="physics.js?v=1"></script>
+<script src="game.js?v=1"></script>
+</body>
+</html>
