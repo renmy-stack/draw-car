@@ -14,6 +14,10 @@ const POWER = 1.8;        // モータートルク = POWER × 全体重 × タ�
 const WMAX = 8;           // タイヤの回転上限（rad/s）
 const TUNNEL_H = 68;      // トンネルの天井高（地面から）
 const MUD_DRAG = 7;       // 泥の抵抗（1/s）
+const TILT_MAX = 22 * Math.PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
+const TILT_K = 30;        // 水平に戻るバネ（rad/s^2 per rad）
+const TILT_D = 3;         // 傾きの減衰（1/s）
+const REACT = 1.0;        // モーター反力を車体に返す割合
 const START_X = 140;
 const SCALE = 0.56;       // パッド座標 → ワールド座標
 const PAD_W = 300, PAD_H = 180;
@@ -37,13 +41,13 @@ const COURSES = [
     sections: [
       ['bumps', { len: 300, amp: 10 }], ['hurdles', { n: 3, h: 22, w: 12, gap: 90 }], ['sawtooth', { n: 4, len: 90, h: 40 }],
       ['ice', { len: 500, dh: -120 }], ['stairs', { n: 4, h: 34, gap: 90 }], ['bigpit', { w: 100, d: 55 }], ['tunnel', { len: 300 }],
-      ['cliff', { dh: 120 }], ['wall', { h: 50 }], ['steep', { len: 220, dh: -100 }],
+      ['cliff', { dh: 120 }], ['wall', { h: 72 }], ['steep', { len: 220, dh: -100 }],
     ] },
   { name: 'まよなか', sky: ['#1c2350', '#4a4f8f'], ground: '#4f7f8f', dirt: '#2f2a3f', dark: true,
     sections: [
       ['wave', { len: 600, dh: 90 }], ['mud', { len: 400 }], ['sawtooth', { n: 5, len: 80, h: 45 }], ['belt', { len: 420, speed: -180 }],
-      ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['tunnel', { len: 360 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['wall', { h: 50 }],
-      ['steep', { len: 200, dh: -110 }], ['cliff', { dh: 140 }], ['stairs', { n: 4, h: 36, gap: 90 }], ['ice', { len: 400, dh: -100 }], ['wall', { h: 50 }],
+      ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['tunnel', { len: 360 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['wall', { h: 72 }],
+      ['steep', { len: 200, dh: -110 }], ['cliff', { dh: 140 }], ['stairs', { n: 4, h: 36, gap: 90 }], ['ice', { len: 400, dh: -100 }], ['wall', { h: 72 }],
     ] },
 ];
 const LABELS = { flat: 'たいら', hills: 'おか', bumps: 'でこぼこ', stairs: 'かいだん', wave: 'おおなみ', pits: 'みぞ',
@@ -56,7 +60,7 @@ function buildCourse(def) {
   const push = (yy, sf) => { H.push(yy); SF.push(sf || null); };
   const seg = (len, f, sf) => { const n = Math.max(1, Math.round(len / TSTEP)), y0 = y; for (let i = 1; i <= n; i++) { y = y0 + f(i / n); push(y, sf); } };
   const flat = (len, sf) => seg(len, () => 0, sf);
-  const vert = dy => { y += dy; push(y); };
+  const vert = (dy, sf) => { if (sf) SF[SF.length - 1] = sf; y += dy; push(y); };   // 面の属性は線分の始点側に持つ
   const hump = (amp, cycles) => t => -amp * (1 - Math.cos(2 * Math.PI * t * cycles)) / 2;
   push(0);
   flat(300);
@@ -98,15 +102,15 @@ function terrain(c, x) {
 function surfaceAt(c, x) { return c.SF[terrainIndex(c, x)]; }
 function closestOnTerrain(c, px, py) {
   const P = c.TP, i0 = terrainIndex(c, px);
-  let best = Infinity, bx = px, by = terrain(c, px);
+  let best = Infinity, bx = px, by = terrain(c, px), bi = i0;
   for (let i = Math.max(0, i0 - 26); i <= Math.min(P.length - 2, i0 + 26); i++) {
     const a = P[i], b = P[i + 1], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
     let u = l2 > 0 ? ((px - a.x) * dx + (py - a.y) * dy) / l2 : 0;
     u = Math.max(0, Math.min(1, u));
     const qx = a.x + dx * u, qy = a.y + dy * u, d = (px - qx) * (px - qx) + (py - qy) * (py - qy);
-    if (d < best) { best = d; bx = qx; by = qy; }
+    if (d < best) { best = d; bx = qx; by = qy; bi = i; }
   }
-  return { x: bx, y: by, d: Math.sqrt(best) };
+  return { x: bx, y: by, d: Math.sqrt(best), i: bi };   // i: いちばん近い線分（面の属性はこれで引く）
 }
 
 function closestOnPoly(P, px, py) {
@@ -143,10 +147,13 @@ function clampWheel(stroke, axle) {
   return stroke.map(p => ({ x: axle.x + (p.x - axle.x) * k, y: axle.y + (p.y - axle.y) * k }));
 }
 // wheels: { rear: 線 | null, front: 線 | null }（パッド座標）
+// 車体の座標系: 原点は重心（b.x, b.y）。b.cx, b.cy は CHASSIS_CENTER 基準で見た重心の位置（描画用）
 function makeCar(wheels) {
   const tf = p => ({ x: (p.x - CHASSIS_CENTER.x) * SCALE, y: (p.y - CHASSIS_CENTER.y) * SCALE });
-  const chassisPts = samplePolyline(CHASSIS.concat([CHASSIS[0]]), 9).map(tf);
-  let m = M_PT * chassisPts.length * 2;   // 車体は重め
+  const chassisRaw = samplePolyline(CHASSIS.concat([CHASSIS[0]]), 9).map(tf);
+  const mc = M_PT * 2;                     // 車体の点は重め
+  let m = mc * chassisRaw.length, sx = 0, sy = 0;
+  for (const p of chassisRaw) { sx += mc * p.x; sy += mc * p.y; }
   const joints = [];
   for (const kind of ['rear', 'front']) {
     const axle = AXLES[kind], o = tf(axle), st = wheels[kind];
@@ -155,36 +162,63 @@ function makeCar(wheels) {
     let I = 0, jr = 0;
     for (const p of pts) { I += M_PT * (p.x * p.x + p.y * p.y); jr = Math.max(jr, Math.hypot(p.x, p.y)); }
     I += M_PT * pts.length * T * T / 2;
-    m += M_PT * pts.length;
-    joints.push({ kind, ox: o.x, oy: o.y, pts, line: st ? st.map(rel) : [], a: 0, w: 0, I, invI: pts.length ? 1 / I : 0, rad: jr + T, active: pts.length > 0 });
+    const mw = M_PT * pts.length;
+    m += mw; sx += mw * o.x; sy += mw * o.y;
+    joints.push({ kind, ox: o.x, oy: o.y, mw, pts, line: st ? st.map(rel) : [], a: 0, w: 0, I, invI: pts.length ? 1 / I : 0, rad: jr + T, active: pts.length > 0 });
   }
-  return { chassisPts, chassisLine: CHASSIS.map(tf), joints, m, invM: 1 / m, x: 0, y: 0, vx: 0, vy: 0, inMud: false, contacts: 0 };
+  const cx = sx / m, cy = sy / m;          // 重心（CHASSIS_CENTER 基準）
+  const chassisPts = chassisRaw.map(p => ({ x: p.x - cx, y: p.y - cy }));
+  let Ib = 0;
+  for (const p of chassisPts) Ib += mc * (p.x * p.x + p.y * p.y);
+  for (const j of joints) { j.ox -= cx; j.oy -= cy; Ib += j.mw * (j.ox * j.ox + j.oy * j.oy); }
+  return { chassisPts, chassisLine: CHASSIS.map(tf), joints, m, invM: 1 / m, Ib, invIb: 1 / Ib, cx, cy,
+    x: 0, y: 0, vx: 0, vy: 0, th: 0, om: 0, inMud: false, contacts: 0 };
+}
+// 車体ローカル座標 → ワールド座標
+function bodyPoint(b, lx, ly) {
+  const co = Math.cos(b.th), si = Math.sin(b.th);
+  return { x: b.x + lx * co - ly * si, y: b.y + lx * si + ly * co };
 }
 function placeAtStart(c, b) {
+  b.th = 0; b.om = 0;
   let low = -Infinity;
   for (const p of b.chassisPts) low = Math.max(low, p.y);
   for (const j of b.joints) for (const p of j.pts) low = Math.max(low, j.oy + p.y);
   b.x = START_X; b.y = terrain(c, START_X) - low - T - 1; b.vx = 0; b.vy = 0;
   for (const j of b.joints) { j.a = 0; j.w = 0; }
 }
-// 1点の接触。j が null なら車体の点、あれば関節 j を軸に回る点
+// 走行中の乗せ替え: 車体の位置・速度・傾き・タイヤの回転を引き継ぐ（重心の位置がずれる分を補正）
+function transferState(from, to) {
+  const co = Math.cos(from.th), si = Math.sin(from.th), dx = to.cx - from.cx, dy = to.cy - from.cy;
+  to.x = from.x + dx * co - dy * si; to.y = from.y + dx * si + dy * co;
+  to.vx = from.vx; to.vy = from.vy; to.th = from.th; to.om = from.om;
+  to.joints.forEach((j, i) => { j.w = from.joints[i].w; j.a = from.joints[i].a; });
+  return to;
+}
+// 1点の接触。j が null なら車体の点、あれば関節 j（ハブまわりに回るタイヤ）の点
+// 一般化速度は (vx, vy, om, 各タイヤの絶対角速度 w)。質量行列は対角（原点が重心なので）
 function applyContact(b, px, py, j, nx, ny, pen, surf) {
-  const belt = surf && surf.belt ? surf.belt : 0, muF = surf && surf.mu ? surf.mu : 1;
-  const rx = j ? px - (b.x + j.ox) : 0, ry = j ? py - (b.y + j.oy) : 0;
-  const w = j ? j.w : 0, invI = j ? j.invI : 0;
-  let vpx = b.vx - w * ry, vpy = b.vy + w * rx;
+  const belt = surf && surf.belt ? surf.belt : 0, muF = surf && surf.mu != null ? surf.mu : 1;
+  // 車体側のレバー: 関節ならハブの位置、車体の点ならその点
+  let hx, hy;
+  if (j) { const h = bodyPoint(b, j.ox, j.oy); hx = h.x - b.x; hy = h.y - b.y; } else { hx = px - b.x; hy = py - b.y; }
+  const rx = j ? px - (b.x + hx) : 0, ry = j ? py - (b.y + hy) : 0;
+  const w = j ? j.w : 0, invI = j ? j.invI : 0, om = b.om, invIb = b.invIb;
+  let vpx = b.vx - om * hy - w * ry, vpy = b.vy + om * hx + w * rx;
   const vn = vpx * nx + vpy * ny;
   if (vn < 0) {
-    const rn = rx * ny - ry * nx, kn = b.invM + rn * rn * invI;
+    const bn = hx * ny - hy * nx, rn = rx * ny - ry * nx;
+    const kn = b.invM + bn * bn * invIb + rn * rn * invI;
     const jn = -(1 + E) * vn / kn;
-    b.vx += jn * nx * b.invM; b.vy += jn * ny * b.invM; if (j) j.w += rn * jn * invI;
-    const tx = -ny, ty = nx, w2 = j ? j.w : 0;
-    vpx = b.vx - w2 * ry; vpy = b.vy + w2 * rx;
+    b.vx += jn * nx * b.invM; b.vy += jn * ny * b.invM; b.om += bn * jn * invIb; if (j) j.w += rn * jn * invI;
+    const tx = -ny, ty = nx, w2 = j ? j.w : 0, om2 = b.om;
+    vpx = b.vx - om2 * hy - w2 * ry; vpy = b.vy + om2 * hx + w2 * rx;
     const vt = (vpx - belt) * tx + vpy * ty;
-    const rt = rx * ty - ry * tx, kt = b.invM + rt * rt * invI;
+    const bt = hx * ty - hy * tx, rt = rx * ty - ry * tx;
+    const kt = b.invM + bt * bt * invIb + rt * rt * invI;
     const lim = MU * muF * jn;
     const jt = Math.max(-lim, Math.min(lim, -vt / kt));
-    b.vx += jt * tx * b.invM; b.vy += jt * ty * b.invM; if (j) j.w += rt * jt * invI;
+    b.vx += jt * tx * b.invM; b.vy += jt * ty * b.invM; b.om += bt * jt * invIb; if (j) j.w += rt * jt * invI;
   }
   const corr = Math.min(pen, 8) * 0.4;
   b.x += nx * corr; b.y += ny * corr;
@@ -215,26 +249,37 @@ function contact(c, b, px, py, j) {
   if (cp.d < 1e-6) { nx = 0; ny = -1; }
   else if (inside) { nx = (cp.x - px) / cp.d; ny = (cp.y - py) / cp.d; }
   else { nx = (px - cp.x) / cp.d; ny = (py - cp.y) / cp.d; }
-  applyContact(b, px, py, j, nx, ny, pen, surfaceAt(c, px));
+  applyContact(b, px, py, j, nx, ny, pen, c.SF[cp.i]);
 }
 function stepCar(c, b, dt) {
   b.vy += G * dt;
   b.vx *= 1 - 0.03 * dt;
+  // 水平に戻るバネ（弱い）と減衰
+  b.om += (-TILT_K * b.th - TILT_D * b.om) * dt;
   for (const j of b.joints) {
     if (!j.active) continue;
-    if (j.w < WMAX) j.w += POWER * G * b.m * j.rad * j.invI * dt;
+    if (j.w - b.om < WMAX) {                 // モーターはタイヤを車体に対して回す
+      const dw = POWER * G * b.m * j.rad * j.invI * dt;
+      j.w += dw;
+      b.om -= REACT * dw * j.I * b.invIb;    // 反力は車体へ
+    }
     j.a += j.w * dt;
   }
   b.x += b.vx * dt; b.y += b.vy * dt;
+  b.th += b.om * dt;
+  if (b.th > TILT_MAX) { b.th = TILT_MAX; if (b.om > 0) b.om = 0; }
+  else if (b.th < -TILT_MAX) { b.th = -TILT_MAX; if (b.om < 0) b.om = 0; }
   b.inMud = false; b.contacts = 0;
-  for (const v of b.chassisPts) contact(c, b, b.x + v.x, b.y + v.y, null);
+  const co = Math.cos(b.th), si = Math.sin(b.th);
+  for (const v of b.chassisPts) contact(c, b, b.x + v.x * co - v.y * si, b.y + v.x * si + v.y * co, null);
   for (const j of b.joints) {
-    const co = Math.cos(j.a), si = Math.sin(j.a);
-    for (const v of j.pts) contact(c, b, b.x + j.ox + v.x * co - v.y * si, b.y + j.oy + v.x * si + v.y * co, j);
+    const hx = b.x + j.ox * co - j.oy * si, hy = b.y + j.ox * si + j.oy * co;
+    const cj = Math.cos(j.a), sj = Math.sin(j.a);
+    for (const v of j.pts) contact(c, b, hx + v.x * cj - v.y * sj, hy + v.x * sj + v.y * cj, j);
   }
-  if (b.inMud) { b.vx *= 1 - MUD_DRAG * dt; for (const j of b.joints) j.w *= 1 - 2 * dt; }
+  if (b.inMud) { b.vx *= 1 - MUD_DRAG * dt; for (const j of b.joints) j.w += (b.om - j.w) * 2 * dt; }
 }
 
 root.DrawCar = { TSTEP, DT, G, T, TUNNEL_H, START_X, SCALE, PAD_W, PAD_H, MAX_WHEEL_R, CHASSIS, CHASSIS_CENTER, AXLES, COURSES,
-  buildCourse, terrain, surfaceAt, samplePolyline, clampWheel, makeCar, placeAtStart, stepCar };
+  buildCourse, terrain, surfaceAt, samplePolyline, clampWheel, makeCar, placeAtStart, transferState, bodyPoint, stepCar };
 })(typeof module !== 'undefined' ? module.exports : window);

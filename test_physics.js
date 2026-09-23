@@ -1,6 +1,6 @@
 // node test_physics.js [制限秒] — 代表的なタイヤで3コースを走らせ、タイムを出す（git 管理外の開発用）
 const { DrawCar } = require('./physics.js');
-const { COURSES, AXLES, buildCourse, makeCar, placeAtStart, stepCar, clampWheel, DT } = DrawCar;
+const { COURSES, AXLES, buildCourse, makeCar, placeAtStart, transferState, stepCar, clampWheel, DT } = DrawCar;
 const shape = (axle, f) => f.map(p => ({ x: axle.x + p.x, y: axle.y + p.y }));
 const circle = (r, n = 40) => Array.from({ length: n + 1 }, (_, i) => ({ x: Math.cos(i / n * 2 * Math.PI) * r, y: Math.sin(i / n * 2 * Math.PI) * r }));
 const poly = (r, k) => Array.from({ length: k + 1 }, (_, i) => ({ x: Math.cos(i / k * 2 * Math.PI) * r, y: Math.sin(i / k * 2 * Math.PI) * r }));
@@ -17,7 +17,7 @@ const BEST = { wall: square, tunnel: SMALL };   // それ以外は 丸68
 function idealRun(c) {
   const mk = f => ({ rear: clampWheel(shape(AXLES.rear, f), AXLES.rear), front: clampWheel(shape(AXLES.front, f), AXLES.front) });
   let cur = null, b = null, t = 0;
-  const sw = f => { const nb = makeCar(mk(f)); if (b) { nb.x = b.x; nb.y = b.y; nb.vx = b.vx; nb.vy = b.vy; nb.joints.forEach((j, i) => { j.w = b.joints[i].w; }); } else placeAtStart(c, nb); b = nb; cur = f; };
+  const sw = f => { const nb = makeCar(mk(f)); if (b) transferState(b, nb); else placeAtStart(c, nb); b = nb; cur = f; };
   sw(BIG);
   while (t < 120 && b.x < c.FINISH_X) {
     const s = c.SECTIONS.find(s => b.x + 40 >= s.from && b.x + 40 < s.to);

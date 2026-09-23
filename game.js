@@ -1,7 +1,7 @@
 // ドローカーレース — 画面・入力・進行（物理は physics.js）
 'use strict';
 const P = window.DrawCar;
-const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, terrain, makeCar, placeAtStart, stepCar, clampWheel } = P;
+const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, terrain, makeCar, placeAtStart, transferState, stepCar, clampWheel } = P;
 
 const VIEW_W = 560;                       // 画面に映る横幅（ワールド座標）
 const INK = '#23262b', PLAYER = '#e0413a', WINDOW = '#bfe9ff';
@@ -55,10 +55,7 @@ function startRace() {
   updateButtons();
 }
 function replaceCar() {
-  const nb = makeCar(wheels);
-  nb.x = car.x; nb.y = car.y; nb.vx = car.vx; nb.vy = car.vy;
-  nb.joints.forEach((j, i) => { j.w = car.joints[i].w; });
-  car = nb;
+  car = transferState(car, makeCar(wheels));
 }
 function finish() {
   state = 'result'; finalTime = raceTime;
@@ -179,16 +176,17 @@ window.addEventListener('resize', resize);
 resize();
 
 function drawCar(ctx, b, scale) {
-  // ctx はワールド座標に変換済み（scale 済み）で呼ぶ
+  // ctx はワールド座標に変換済み（scale 済み）で呼ぶ。b.x, b.y は重心、b.th は車体の傾き
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  // タイヤ（車体の後ろ側）
+  ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.th);
+  // タイヤ（車体の後ろ側）。ハブは車体と一緒に傾き、タイヤ自体は絶対角 j.a で回る
   for (const j of b.joints) {
-    ctx.save(); ctx.translate(b.x + j.ox, b.y + j.oy); ctx.rotate(j.a);
+    ctx.save(); ctx.translate(j.ox, j.oy); ctx.rotate(j.a - b.th);
     if (j.line.length) { ctx.strokeStyle = INK; ctx.lineWidth = T * 2; strokePath(ctx, j.line); }
     ctx.restore();
   }
-  // 車体
-  ctx.save(); ctx.translate(b.x, b.y);
+  // 車体（CHASSIS_CENTER 基準の座標で描くので、重心の分だけずらす）
+  ctx.save(); ctx.translate(-b.cx, -b.cy);
   chassisPath(ctx, b.chassisLine); ctx.fillStyle = PLAYER; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
   const tf = p => ({ x: (p.x - CHASSIS_CENTER.x) * SCALE, y: (p.y - CHASSIS_CENTER.y) * SCALE });
   const w0 = tf({ x: 136, y: 64 }), w1 = tf({ x: 182, y: 84 });
@@ -198,9 +196,10 @@ function drawCar(ctx, b, scale) {
   ctx.restore();
   // ハブ
   for (const j of b.joints) {
-    ctx.beginPath(); ctx.arc(b.x + j.ox, b.y + j.oy, 3.5, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(j.ox, j.oy, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.stroke();
   }
+  ctx.restore();
 }
 
 function render() {

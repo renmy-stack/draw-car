@@ -14,7 +14,7 @@ const SECTIONS = [
   ['wave', { len: 500, dh: 80 }], ['pits', { n: 2, w: 60, d: 28, gap: 120 }], ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['bigpit', { w: 100, d: 55 }],
   ['hurdles', { n: 3, h: 22, w: 12, gap: 90 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['sawtooth', { n: 4, len: 90, h: 40 }],
   ['ice', { len: 500, dh: -120 }], ['cliff', { dh: 120 }], ['steep', { len: 220, dh: -100 }], ['mud', { len: 400 }], ['belt', { len: 420, speed: -180 }],
-  ['wall', { h: 50 }], ['tunnel', { len: 360 }],
+  ['wall', { h: 72 }], ['tunnel', { len: 360 }],
 ];
 const limit = 40;
 console.log('区間'.padEnd(26) + Object.keys(SHAPES).map(k => k.padEnd(9)).join(''));
