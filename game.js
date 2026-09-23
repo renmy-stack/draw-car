@@ -146,7 +146,7 @@ pad.addEventListener('pointercancel', endStroke);
 pad.addEventListener('pointerleave', e => { if (drawing && !pad.hasPointerCapture?.(e.pointerId)) endStroke(); });
 
 // ---------- ボタン ----------
-document.querySelectorAll('.cbtn').forEach(b => b.addEventListener('click', () => { if (state !== 'racing') selectCourse(+b.dataset.c); }));
+document.querySelectorAll('.cbtn').forEach(b => b.addEventListener('click', () => selectCourse(+b.dataset.c)));
 $('start').addEventListener('click', () => { if (state === 'idle' && hasWheels()) startRace(); });
 $('retry').addEventListener('click', () => { if (state === 'racing') startRace(); });
 $('clear').addEventListener('click', () => {
