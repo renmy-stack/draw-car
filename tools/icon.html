@@ -18,7 +18,7 @@ ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.moveTo(0, W);
 for (let x = 0; x <= W; x += 8) ctx.lineTo(x, W * 0.60 + Math.sin(x * 0.006) * 40 + Math.sin(x * 0.015) * 16);
 ctx.lineTo(W, W); ctx.closePath(); ctx.fill();
 // 車の配置: パッド座標 → アイコン座標
-const R = 42;                                   // タイヤ半径（パッド座標）
+const R = 34;                                   // タイヤ半径（パッド座標）
 const k = W * 0.84 / 190;                       // 車幅 180 + 少し
 const groundPad = AXLES.rear.y + R + 4;         // 地面（タイヤの下端）
 const ox = W / 2 - 150 * k, oy = W * 0.72 - groundPad * k;
