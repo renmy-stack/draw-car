@@ -87,6 +87,15 @@ button[hidden] { display: none !important; }
 .rtime .unit { font-size: 18px; margin-left: 4px; }
 .rbest { font-size: 14px; min-height: 20px; margin-top: 2px; }
 .rbest.record { color: var(--player); font-weight: 800; }
+.rghosts { font-size: 13px; margin-top: 8px; line-height: 1.6; }
+.rghosts .win { color: var(--player); }
+.gdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+#toast {
+  position: fixed; left: 50%; top: 45%; transform: translateX(-50%); max-width: 86vw; z-index: 20;
+  background: rgba(35, 38, 43, .92); color: #fff; font-weight: 700; font-size: 14px; padding: 10px 16px; border-radius: 12px; text-align: center;
+  pointer-events: none;
+}
+#toast[hidden] { display: none; }
 .rbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
 #shareimg { width: 100%; border-radius: 10px; border: 1px solid var(--line); }
 .note { font-size: 12px; opacity: .7; margin-top: 6px; }

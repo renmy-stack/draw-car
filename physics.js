@@ -2,6 +2,21 @@
 (function (root) {
 'use strict';
 
+// ---------- 決定的な数学 ----------
+// ゴーストを別の端末でも同じ動きで再生するため、物理では Math.sin/cos/hypot を使わない
+// （エンジンごとに最後の桁が違うことがあり、接触が絡むと数秒でずれる）。+ - * / sqrt だけで組む
+const PHYS_VERSION = 1;   // 物理やコースの数値を変えたら上げる（古いゴーストは捨てる）
+const PI = Math.PI, TWO_PI = PI * 2, HALF_PI = PI / 2;
+function wrapAngle(x) { if (x > PI || x < -PI) x -= TWO_PI * Math.floor((x + PI) / TWO_PI); return x; }
+function dsin(x) {
+  x = wrapAngle(x);
+  if (x > HALF_PI) x = PI - x; else if (x < -HALF_PI) x = -PI - x;
+  const x2 = x * x;
+  return x * (1 + x2 * (-1 / 6 + x2 * (1 / 120 + x2 * (-1 / 5040 + x2 * (1 / 362880 + x2 * (-1 / 39916800 + x2 * (1 / 6227020800 + x2 * (-1 / 1307674368000 + x2 * (1 / 355687428096000)))))))));
+}
+function dcos(x) { return dsin(x + HALF_PI); }
+function len2(x, y) { return Math.sqrt(x * x + y * y); }
+
 // ---------- 定数 ----------
 const TSTEP = 2;          // 地形サンプル間隔（ワールド px）
 const DT = 1 / 240;       // 物理ステップ
@@ -15,7 +30,7 @@ const WMAX = 8;           // タイヤの回転上限（rad/s）
 const TUNNEL_H = 68;      // トンネルの天井高（地面から）
 const MUD_DRAG = 7;       // 泥の抵抗（1/s）
 const WATER_DRAG = 14;    // 水（くさった橋の下）の抵抗（1/s）
-const TILT_MAX = 22 * Math.PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
+const TILT_MAX = 22 * PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
 const TILT_K = 30;        // 水平に戻るバネ（rad/s^2 per rad）
 const TILT_D = 3;         // 傾きの減衰（1/s）
 const REACT = 1.0;        // モーター反力を車体に返す割合
@@ -61,7 +76,7 @@ function buildCourse(def) {
   const seg = (len, f, sf) => { const n = Math.max(1, Math.round(len / TSTEP)), y0 = y; for (let i = 1; i <= n; i++) { y = y0 + f(i / n); push(y, sf); } };
   const flat = (len, sf) => seg(len, () => 0, sf);
   const vert = (dy, sf) => { if (sf) SF[SF.length - 1] = sf; y += dy; push(y); };   // 面の属性は線分の始点側に持つ
-  const hump = (amp, cycles) => t => -amp * (1 - Math.cos(2 * Math.PI * t * cycles)) / 2;
+  const hump = (amp, cycles) => t => -amp * (1 - dcos(TWO_PI * t * cycles)) / 2;
   push(0);
   flat(300);
   for (const [type, p] of def.sections) {
@@ -153,7 +168,7 @@ function samplePolyline(pts, spacing) {
   const out = [{ x: pts[0].x, y: pts[0].y }];
   let carry = 0;
   for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1], b = pts[i], d = Math.hypot(b.x - a.x, b.y - a.y);
+    const a = pts[i - 1], b = pts[i], d = len2(b.x - a.x, b.y - a.y);
     if (d === 0) continue;
     let t = spacing - carry;
     while (t <= d) { out.push({ x: a.x + (b.x - a.x) * t / d, y: a.y + (b.y - a.y) * t / d }); t += spacing; }
@@ -175,7 +190,7 @@ function makeCar(wheels) {
     const rel = p => ({ x: (p.x - axle.x) * SCALE, y: (p.y - axle.y) * SCALE });
     const pts = st ? samplePolyline(st, 8).map(rel) : [];
     let I = 0, jr = 0;
-    for (const p of pts) { I += M_PT * (p.x * p.x + p.y * p.y); jr = Math.max(jr, Math.hypot(p.x, p.y)); }
+    for (const p of pts) { I += M_PT * (p.x * p.x + p.y * p.y); jr = Math.max(jr, len2(p.x, p.y)); }
     I += M_PT * pts.length * T * T / 2;
     const mw = M_PT * pts.length;
     m += mw; sx += mw * o.x; sy += mw * o.y;
@@ -193,7 +208,7 @@ function makeCar(wheels) {
 }
 // 車体ローカル座標 → ワールド座標
 function bodyPoint(b, lx, ly) {
-  const co = Math.cos(b.th), si = Math.sin(b.th);
+  const co = dcos(b.th), si = dsin(b.th);
   return { x: b.x + lx * co - ly * si, y: b.y + lx * si + ly * co };
 }
 function placeAtStart(c, b) {
@@ -206,7 +221,7 @@ function placeAtStart(c, b) {
 }
 // 走行中の乗せ替え: 車体の位置・速度・傾き・タイヤの回転を引き継ぐ（重心の位置がずれる分を補正）
 function transferState(from, to) {
-  const co = Math.cos(from.th), si = Math.sin(from.th), dx = to.cx - from.cx, dy = to.cy - from.cy;
+  const co = dcos(from.th), si = dsin(from.th), dx = to.cx - from.cx, dy = to.cy - from.cy;
   to.x = from.x + dx * co - dy * si; to.y = from.y + dx * si + dy * co;
   to.vx = from.vx; to.vy = from.vy; to.th = from.th; to.om = from.om;
   to.joints.forEach((j, i) => { j.w = from.joints[i].w; j.a = from.joints[i].a; });
@@ -282,6 +297,7 @@ function stepCar(c, b, dt) {
       b.om -= REACT * dw * j.I * b.invIb;    // 反力は車体へ
     }
     j.a += j.w * dt;
+    if (j.a > PI) j.a -= TWO_PI; else if (j.a < -PI) j.a += TWO_PI;   // 角度を小さく保つ（精度と決定性のため）
   }
   b.x += b.vx * dt; b.y += b.vy * dt;
   b.th += b.om * dt;
@@ -289,16 +305,106 @@ function stepCar(c, b, dt) {
   else if (b.th < -TILT_MAX) { b.th = -TILT_MAX; if (b.om < 0) b.om = 0; }
   b.inMud = false; b.inWater = false; b.contacts = 0;
   for (const br of c.BRIDGES) if (!br.broken && b.reach > br.limit && b.x > br.x0 - 20 && b.x < br.x1) breakBridge(c, br);   // 乗った瞬間に抜ける
-  const co = Math.cos(b.th), si = Math.sin(b.th);
+  const co = dcos(b.th), si = dsin(b.th);
   for (const v of b.chassisPts) contact(c, b, b.x + v.x * co - v.y * si, b.y + v.x * si + v.y * co, null);
   for (const j of b.joints) {
     const hx = b.x + j.ox * co - j.oy * si, hy = b.y + j.ox * si + j.oy * co;
-    const cj = Math.cos(j.a), sj = Math.sin(j.a);
+    const cj = dcos(j.a), sj = dsin(j.a);
     for (const v of j.pts) contact(c, b, hx + v.x * cj - v.y * sj, hy + v.x * sj + v.y * cj, j);
   }
   if (b.inMud) { b.vx *= 1 - (b.inWater ? WATER_DRAG : MUD_DRAG) * dt; for (const j of b.joints) j.w += (b.om - j.w) * 2 * dt; }
 }
 
-root.DrawCar = { TSTEP, DT, G, T, TUNNEL_H, START_X, SCALE, PAD_W, PAD_H, CHASSIS, CHASSIS_CENTER, AXLES, COURSES,
+// ---------- ゴースト: イベント列 [{ k, kind, pts }] からの再生 ----------
+// k = そのステップの前にタイヤを差し替える（レース開始からの物理ステップ番号）。pts が空なら そのタイヤを消す
+function makeRunner(def, events) {
+  const ev = events.slice().sort((a, b) => a.k - b.k);
+  const r = { course: buildCourse(def), events: ev, ei: 0, k: 0, done: false, time: null, wheels: { rear: null, front: null }, car: null };
+  applyEvents(r);
+  r.car = makeCar(r.wheels); placeAtStart(r.course, r.car);
+  return r;
+}
+function applyEvents(r) {
+  let changed = false;
+  while (r.ei < r.events.length && r.events[r.ei].k <= r.k) {
+    const e = r.events[r.ei++]; r.wheels[e.kind] = e.pts && e.pts.length ? e.pts : null; changed = true;
+  }
+  return changed;
+}
+function stepRunner(r) {
+  if (r.done) return;
+  if (r.k > 0 && applyEvents(r)) r.car = transferState(r.car, makeCar(r.wheels));
+  stepCar(r.course, r.car, DT); r.k++;
+  if (r.car.x >= r.course.FINISH_X) { r.done = true; r.time = r.k * DT; }
+}
+// おてほん（CPU）: 区間ごとに最適な形へ描き替える。イベント列とタイムを返す
+const SHAPE = {
+  circle: (r, n) => Array.from({ length: n + 1 }, (_, i) => ({ x: dcos(i / n * TWO_PI) * r, y: dsin(i / n * TWO_PI) * r })),
+  poly: (r, k) => Array.from({ length: k + 1 }, (_, i) => ({ x: dcos(i / k * TWO_PI) * r, y: dsin(i / k * TWO_PI) * r })),
+};
+function idealEvents(def, maxSec) {
+  const at = (axle, f) => f.map(p => ({ x: axle.x + p.x, y: axle.y + p.y }));
+  const BIG = SHAPE.circle(68, 40), SMALL = SHAPE.circle(30, 40), SQUARE = SHAPE.poly(60, 4);
+  const BEST = { wall: SQUARE, gate: SQUARE, tunnel: SMALL };
+  const c = buildCourse(def), events = [];
+  let b = null, cur = null, k = 0;
+  const sw = f => {
+    const w = { rear: at(AXLES.rear, f), front: at(AXLES.front, f) };
+    events.push({ k, kind: 'rear', pts: w.rear }, { k, kind: 'front', pts: w.front });
+    const nb = makeCar(w); if (b) transferState(b, nb); else placeAtStart(c, nb); b = nb; cur = f;
+  };
+  sw(BIG);
+  const maxK = Math.round((maxSec || 120) / DT);
+  while (k < maxK && b.x < c.FINISH_X) {
+    const s = c.SECTIONS.find(s => b.x + 40 >= s.from && b.x + 40 < s.to);
+    let want = (s && BEST[s.type]) || BIG;
+    const tn = c.TUNNELS.find(tn => b.x - 90 < tn.x1 && b.x + 50 > tn.x0);
+    if (tn) want = tn.gate ? SQUARE : SMALL;
+    if (want !== cur) sw(want);
+    stepCar(c, b, DT); k++;
+  }
+  return { events, time: b.x >= c.FINISH_X ? k * DT : null };
+}
+// ゴーストの URL 用エンコード（base64url）。座標は 0.5px 単位の整数、2 点目からは差分 1 バイト
+function encodeGhost(g) {
+  const out = [];
+  const u8 = v => out.push(v & 255), u16 = v => { out.push(v & 255, (v >> 8) & 255); };
+  u8(1); u8(PHYS_VERSION); u8(g.course); u16(Math.min(65535, Math.round((g.time || 0) * 100))); u8(g.events.length);
+  for (const e of g.events) {
+    u16(e.k); u8(e.kind === 'front' ? 1 : 0); u16(e.pts.length);
+    let px = 0, py = 0;
+    e.pts.forEach((p, i) => {
+      const x = Math.round(p.x * 2), y = Math.round(p.y * 2);
+      if (i === 0) { u16(x + 32768); u16(y + 32768); }
+      else for (const d of [x - px, y - py]) { if (d >= -127 && d <= 127) u8(d); else { u8(128); u16(d + 32768); } }
+      px = x; py = y;
+    });
+  }
+  let bin = ''; for (const v of out) bin += String.fromCharCode(v);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function decodeGhost(str) {
+  try {
+    const bin = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    const a = Array.from(bin, ch => ch.charCodeAt(0));
+    let i = 0; const u8 = () => a[i++], u16 = () => { const v = a[i] | (a[i + 1] << 8); i += 2; return v; };
+    if (u8() !== 1 || u8() !== PHYS_VERSION) return null;
+    const course = u8(), time = u16() / 100, n = u8(), events = [];
+    for (let e = 0; e < n; e++) {
+      const k = u16(), kind = u8() ? 'front' : 'rear', m = u16(), pts = [];
+      let x = 0, y = 0;
+      for (let j = 0; j < m; j++) {
+        if (j === 0) { x = u16() - 32768; y = u16() - 32768; }
+        else { for (const c of ['x', 'y']) { let d = u8(); if (d === 128) d = u16() - 32768; else if (d > 127) d -= 256; if (c === 'x') x += d; else y += d; } }
+        pts.push({ x: x / 2, y: y / 2 });
+      }
+      events.push({ k, kind, pts });
+    }
+    if (i !== a.length) return null;
+    return { course, time: time || null, events };
+  } catch (e) { return null; }
+}
+
+root.DrawCar = { PHYS_VERSION, dsin, dcos, makeRunner, stepRunner, idealEvents, encodeGhost, decodeGhost, TSTEP, DT, G, T, TUNNEL_H, START_X, SCALE, PAD_W, PAD_H, CHASSIS, CHASSIS_CENTER, AXLES, COURSES,
   buildCourse, resetCourse, terrain, surfaceAt, samplePolyline, makeCar, placeAtStart, transferState, bodyPoint, stepCar };
 })(typeof module !== 'undefined' ? module.exports : window);

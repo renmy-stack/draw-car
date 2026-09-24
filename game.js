@@ -1,7 +1,8 @@
 // ドローカーレース — 画面・入力・進行（物理は physics.js）
 'use strict';
 const P = window.DrawCar;
-const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, resetCourse, terrain, makeCar, placeAtStart, transferState, stepCar } = P;
+const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, resetCourse, terrain, makeCar, placeAtStart, transferState, stepCar,
+  PHYS_VERSION, makeRunner, stepRunner, idealEvents, encodeGhost, decodeGhost } = P;
 
 const VIEW_W = 560;                       // 画面に映る横幅（ワールド座標）
 const INK = '#23262b', PLAYER = '#e0413a', WINDOW = '#bfe9ff';
@@ -9,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '6';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '7';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -22,17 +23,38 @@ let raceTime = 0, lastTs = 0, acc = 0, animT = 0;
 let camX = 0, camY = 0, camInit = false;
 let stroke = [], drawing = false;
 let finalTime = 0, isRecord = false;
+// ゴースト: レース開始からの物理ステップ番号 k とタイヤの差し替えイベントで走りを再現する
+let events = [], stepK = 0, ghosts = [], lastRun = null;
+const cpuCache = {};
+const GHOST_STYLE = { cpu: { label: 'おてほん', color: '#5a7fb0' }, best: { label: 'ベスト', color: '#e0a83a' }, rival: { label: 'ともだち', color: '#3aa76d' } };
 
 // ---------- 記録 ----------
 function loadBest(i) { try { const v = localStorage.getItem('drawcar.best.' + i); return v ? +v : null; } catch (e) { return null; } }
 function saveBest(i, t) { try { localStorage.setItem('drawcar.best.' + i, String(t)); } catch (e) {} }
 function fmt(t) { return t.toFixed(2); }
+function loadGhost(key, i) {
+  try { const g = JSON.parse(localStorage.getItem('drawcar.' + key + '.' + i)); return g && g.v === PHYS_VERSION && Array.isArray(g.events) ? g : null; } catch (e) { return null; }
+}
+function saveGhost(key, i, g) { try { localStorage.setItem('drawcar.' + key + '.' + i, JSON.stringify({ v: PHYS_VERSION, time: g.time, events: g.events })); } catch (e) {} }
+function cpuGhost(i) { if (!cpuCache[i]) cpuCache[i] = idealEvents(COURSES[i]); return cpuCache[i]; }
+function ghostDefs(i) {
+  const list = [];
+  const cpu = cpuGhost(i); if (cpu.time) list.push({ kind: 'cpu', time: cpu.time, events: cpu.events });
+  const best = loadGhost('ghost', i); if (best) list.push({ kind: 'best', time: best.time, events: best.events });
+  const rival = loadGhost('rival', i); if (rival) list.push({ kind: 'rival', time: rival.time, events: rival.events });
+  return list;
+}
+let toastTimer = 0;
+function toast(msg) {
+  const el = $('toast'); el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+}
 
 // ---------- コース・状態 ----------
 function selectCourse(i) {
   courseIdx = i; course = buildCourse(COURSES[i]);
   car = makeCar(wheels); placeAtStart(course, car);
-  state = 'idle'; raceTime = 0; camInit = false;
+  state = 'idle'; raceTime = 0; camInit = false; ghosts = [];
   document.querySelectorAll('.cbtn').forEach(b => b.classList.toggle('active', +b.dataset.c === i));
   $('cname-text').textContent = 'コース' + (i + 1) + ' ' + COURSES[i].name;
   const best = loadBest(i);
@@ -54,6 +76,10 @@ function startRace() {
   resetCourse(course);
   car = makeCar(wheels); placeAtStart(course, car);
   raceTime = 0; acc = 0; state = 'racing';
+  events = []; stepK = 0;
+  for (const kind of ['rear', 'front']) if (wheels[kind]) events.push({ k: 0, kind, pts: wheels[kind] });
+  // ゴーストはそれぞれ自分のコースを持つ（橋を割っても こちらのコースには影響しない）
+  ghosts = ghostDefs(courseIdx).map(g => ({ kind: g.kind, label: GHOST_STYLE[g.kind].label, color: GHOST_STYLE[g.kind].color, time: g.time, runner: makeRunner(COURSES[courseIdx], g.events) }));
   $('result').hidden = true;
   updateButtons();
 }
@@ -64,7 +90,13 @@ function finish() {
   state = 'result'; finalTime = raceTime;
   const best = loadBest(courseIdx);
   isRecord = !best || finalTime < best;
-  if (isRecord) saveBest(courseIdx, finalTime);
+  lastRun = { time: finalTime, events: events.slice() };
+  if (isRecord) { saveBest(courseIdx, finalTime); saveGhost('ghost', courseIdx, lastRun); }
+  $('rghosts').innerHTML = ghosts.map(g => {
+    const d = finalTime - g.time;
+    const res = d <= 0 ? '<b class="win">' + fmt(-d) + '秒 かち！</b>' : fmt(d) + '秒 まけ';
+    return '<div><span class="gdot" style="background:' + g.color + '"></span>' + g.label + ' ' + fmt(g.time) + '秒 に ' + res + '</div>';
+  }).join('');
   $('rcourse').textContent = 'コース' + (courseIdx + 1) + ' ' + COURSES[courseIdx].name;
   $('rtime').textContent = fmt(finalTime);
   const rb = $('rbest');
@@ -129,6 +161,8 @@ function endStroke(e) {
   if (!drawing) return;
   drawing = false;
   if (stroke.length >= 3) {
+    // 0.5px に丸める（ゴーストの URL に入れる形と、いま走る形を同じにするため）
+    stroke = stroke.map(p => ({ x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 }));
     // 線の中心に近い軸へ
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const p of stroke) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
@@ -136,7 +170,7 @@ function endStroke(e) {
     const kind = Math.hypot(cx - AXLES.rear.x, cy - AXLES.rear.y) <= Math.hypot(cx - AXLES.front.x, cy - AXLES.front.y) ? 'rear' : 'front';
     wheels[kind] = stroke;
     if (state === 'idle') startRace();
-    else if (state === 'racing') replaceCar();
+    else if (state === 'racing') { events.push({ k: stepK, kind, pts: stroke }); replaceCar(); }
     // リザルト表示中は次のレース用に描くだけ
   }
   stroke = [];
@@ -192,8 +226,9 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function drawCar(ctx, b, scale) {
+function drawCar(ctx, b, scale, color) {
   // ctx はワールド座標に変換済み（scale 済み）で呼ぶ。b.x, b.y は重心、b.th は車体の傾き
+  const body = color || PLAYER;
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.th);
   // タイヤ（車体の後ろ側）。ハブは車体と一緒に傾き、タイヤ自体は絶対角 j.a で回る
@@ -204,7 +239,7 @@ function drawCar(ctx, b, scale) {
   }
   // 車体（CHASSIS_CENTER 基準の座標で描くので、重心の分だけずらす）
   ctx.save(); ctx.translate(-b.cx, -b.cy);
-  chassisPath(ctx, b.chassisLine); ctx.fillStyle = PLAYER; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+  chassisPath(ctx, b.chassisLine); ctx.fillStyle = body; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
   const tf = p => ({ x: (p.x - CHASSIS_CENTER.x) * SCALE, y: (p.y - CHASSIS_CENTER.y) * SCALE });
   const w0 = tf({ x: 136, y: 42 }), w1 = tf({ x: 182, y: 62 });
   ctx.fillStyle = WINDOW; ctx.fillRect(w0.x, w0.y, w1.x - w0.x, w1.y - w0.y);
@@ -300,6 +335,14 @@ function render() {
     ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.fillStyle = INK; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(label, gx, gy - 86);
   }
+  // ゴースト（半透明。自分の車の後ろ）
+  for (const g of ghosts) {
+    const gc = g.runner.car;
+    if (gc.x < camX - 150 || gc.x > camX + VIEW_W + 150) continue;
+    ctx.save(); ctx.globalAlpha = 0.45; drawCar(ctx, gc, scale, g.color); ctx.restore();
+    ctx.save(); ctx.globalAlpha = 0.85; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = g.color;
+    ctx.fillText(g.label, gc.x, gc.y - 48); ctx.restore();
+  }
   drawCar(ctx, car, scale);
   ctx.restore();
 
@@ -322,7 +365,8 @@ function frame(ts) {
   if (state === 'racing') {
     acc += dt;
     while (acc >= DT) {
-      stepCar(course, car, DT); raceTime += DT; acc -= DT;
+      stepCar(course, car, DT); raceTime += DT; acc -= DT; stepK++;
+      for (const g of ghosts) stepRunner(g.runner);
       if (car.x >= course.FINISH_X) { finish(); break; }
     }
     $('timer').textContent = fmt(raceTime);
@@ -356,7 +400,8 @@ function shareResult() {
   const bin = atob(dataUrl.split(',')[1]), buf = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
   const file = new File([buf], 'drawcar.png', { type: 'image/png' });
-  const text = 'ドローカーレース コース' + (courseIdx + 1) + ' ' + def.name + '\nタイム : ' + fmt(finalTime) + '秒' + (isRecord ? '（じこベスト）' : '') + '\n\n' + SITE_URL + '\n#ドローカーレース';
+  const ghostUrl = lastRun ? SITE_URL + '#g=' + encodeGhost({ course: courseIdx, time: lastRun.time, events: lastRun.events }) : SITE_URL;
+  const text = 'ドローカーレース コース' + (courseIdx + 1) + ' ' + def.name + '\nタイム : ' + fmt(finalTime) + '秒' + (isRecord ? '（じこベスト）' : '') + '\n\nこの走りに かてる？ ゴーストと たいせん\n' + ghostUrl + '\n#ドローカーレース';
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     navigator.share({ files: [file], text }).catch(() => {});
   } else if (navigator.share) {
@@ -368,7 +413,7 @@ function showShareBox(dataUrl, text) {
 }
 
 // ---------- 開発用: ff(秒) で早送り ----------
-window.ff = sec => { if (state !== 'racing') return 'not racing'; const n = Math.round(sec / DT); for (let i = 0; i < n; i++) { stepCar(course, car, DT); raceTime += DT; if (car.x >= course.FINISH_X) { finish(); break; } } camInit = false; $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime); return state + ' x=' + car.x.toFixed(0) + ' t=' + raceTime.toFixed(2); };
+window.ff = sec => { if (state !== 'racing') return 'not racing'; const n = Math.round(sec / DT); for (let i = 0; i < n; i++) { stepCar(course, car, DT); raceTime += DT; stepK++; for (const g of ghosts) stepRunner(g.runner); if (car.x >= course.FINISH_X) { finish(); break; } } camInit = false; $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime); return state + ' x=' + car.x.toFixed(0) + ' t=' + raceTime.toFixed(2); };
 
 // ---------- 自動更新: Safari が古いページを開き続けるので、新しい版があれば読み直す ----------
 async function checkVersion() {
@@ -385,4 +430,15 @@ checkVersion();
 // ---------- 開始 ----------
 selectCourse(0);
 drawPad();
+// URL の #g=... にゴーストが入っていたら、そのコースの「ともだち」として保存して開く
+(function importGhost() {
+  const m = /[#&]g=([A-Za-z0-9_-]+)/.exec(location.hash);
+  if (!m) return;
+  const g = decodeGhost(m[1]);
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!g || g.course < 0 || g.course >= COURSES.length) { toast('ゴーストを よみこめませんでした（ゲームのバージョンが ちがいます）'); return; }
+  saveGhost('rival', g.course, g);
+  selectCourse(g.course);
+  toast('ともだちの ゴーストが とうちゃく！ コース' + (g.course + 1) + (g.time ? ' ' + fmt(g.time) + '秒' : '') + ' に かとう');
+})();
 requestAnimationFrame(frame);
