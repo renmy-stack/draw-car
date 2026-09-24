@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '8';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '9';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -87,7 +87,8 @@ function finish() {
   const best = loadBest(courseIdx);
   isRecord = !best || finalTime < best;
   lastRun = { time: finalTime, events: events.slice() };
-  if (isRecord) { saveBest(courseIdx, finalTime); saveGhost('ghost', courseIdx, lastRun); }
+  if (isRecord) saveBest(courseIdx, finalTime);
+  if (isRecord || !loadGhost('ghost', courseIdx)) saveGhost('ghost', courseIdx, lastRun);   // ゴーストが無ければ記録でなくても保存
   $('rghosts').innerHTML = ghosts.map(g => {
     const d = finalTime - g.time;
     const res = d <= 0 ? '<b class="win">' + fmt(-d) + '秒 かち！</b>' : fmt(d) + '秒 まけ';
@@ -423,6 +424,13 @@ window.addEventListener('pageshow', e => { if (e.persisted) checkVersion(); });
 checkVersion();
 
 // ---------- 開始 ----------
+// 物理のバージョンが変わったら、古い物理で出した記録とゴーストは捨てる（同じ土俵で比べられないため）
+try {
+  if (localStorage.getItem('drawcar.physv') !== String(PHYS_VERSION)) {
+    for (let i = 0; i < COURSES.length; i++) for (const k of ['best', 'ghost', 'rival']) localStorage.removeItem('drawcar.' + k + '.' + i);
+    localStorage.setItem('drawcar.physv', String(PHYS_VERSION));
+  }
+} catch (e) {}
 selectCourse(0);
 drawPad();
 requestAnimationFrame(frame);
