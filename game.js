@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '9';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '10';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -54,7 +54,7 @@ function selectCourse(i) {
   document.querySelectorAll('.cbtn').forEach(b => b.classList.toggle('active', +b.dataset.c === i));
   $('cname-text').textContent = 'コース' + (i + 1) + ' ' + COURSES[i].name;
   const best = loadBest(i);
-  $('cbest').textContent = best ? 'ベスト ' + fmt(best) + '秒' : 'まだ きろくなし';
+  $('cbest').textContent = (best ? 'ベスト ' + fmt(best) + '秒' : 'まだ きろくなし') + '  v' + VERSION;
   $('result').hidden = true;
   document.body.style.background = COURSES[i].sky[0];
   document.body.classList.toggle('dark', !!COURSES[i].dark);
@@ -89,7 +89,8 @@ function finish() {
   lastRun = { time: finalTime, events: events.slice() };
   if (isRecord) saveBest(courseIdx, finalTime);
   if (isRecord || !loadGhost('ghost', courseIdx)) saveGhost('ghost', courseIdx, lastRun);   // ゴーストが無ければ記録でなくても保存
-  $('rghosts').innerHTML = ghosts.map(g => {
+  $('rghosts').innerHTML = ghosts.length ? '' : '<div>つぎのレースから この走りが「ベスト」として いっしょに走ります</div>';
+  $('rghosts').innerHTML += ghosts.map(g => {
     const d = finalTime - g.time;
     const res = d <= 0 ? '<b class="win">' + fmt(-d) + '秒 かち！</b>' : fmt(d) + '秒 まけ';
     return '<div><span class="gdot" style="background:' + g.color + '"></span>' + g.label + ' ' + fmt(g.time) + '秒 に ' + res + '</div>';
@@ -364,6 +365,7 @@ function frame(ts) {
     while (acc >= DT) {
       stepCar(course, car, DT); raceTime += DT; acc -= DT; stepK++;
       for (const g of ghosts) stepRunner(g.runner);
+      if (dbg && (stepK % 60) === 0) dbgLog('ghosts', String(ghosts.length));
       if (car.x >= course.FINISH_X) { finish(); break; }
     }
     $('timer').textContent = fmt(raceTime);
@@ -416,7 +418,12 @@ async function checkVersion() {
   try {
     const r = await fetch('version.txt?ts=' + Date.now(), { cache: 'no-store' });
     const v = (await r.text()).trim();
-    if (v && v !== VERSION && state !== 'racing') location.reload();
+    if (v && v !== VERSION && state !== 'racing') {
+      let tried = ''; try { tried = sessionStorage.getItem('drawcar.reloadFor') || ''; } catch (e) {}
+      if (tried === v) return;   // すでにこの版のために読み直した（配信側がまだ古い）。空回りしない
+      try { sessionStorage.setItem('drawcar.reloadFor', v); } catch (e) {}
+      location.reload();
+    }
   } catch (e) {}
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
