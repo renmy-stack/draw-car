@@ -5,7 +5,7 @@
 // ---------- 決定的な数学 ----------
 // ゴーストを別の端末でも同じ動きで再生するため、物理では Math.sin/cos/hypot を使わない
 // （エンジンごとに最後の桁が違うことがあり、接触が絡むと数秒でずれる）。+ - * / sqrt だけで組む
-const PHYS_VERSION = 3;   // 物理やコースの数値を変えたら上げる（古いゴーストは捨てる）
+const PHYS_VERSION = 4;   // 物理やコースの数値を変えたら上げる（古いゴーストは捨てる）
 const PI = Math.PI, TWO_PI = PI * 2, HALF_PI = PI / 2;
 function wrapAngle(x) { if (x > PI || x < -PI) x -= TWO_PI * Math.floor((x + PI) / TWO_PI); return x; }
 function dsin(x) {
@@ -28,7 +28,7 @@ const MU = 1.0;           // 摩擦係数
 const POWER = 1.8;        // モータートルク = POWER × 全体重 × タイヤ半径
 const WMAX = 8;           // タイヤの回転上限（rad/s）
 const TUNNEL_H = 68;      // トンネルの天井高（地面から）
-const BLOCK_T = 225;      // トンネルの天井ブロックの厚み。普段は気づかない高さ。パッドいっぱいのジグザグならまれに上を越えられる（裏技。search_overtop.js で約 0.6%）
+const BLOCK_T = 400;      // トンネルの天井ブロックの厚み（オーナー指定）。上に乗れば越えられる作りだが、ランダムな形の探索では越えられた形なし（search_overtop.js）
 const MUD_DRAG = 7;       // 泥の抵抗（1/s）
 const WATER_DRAG = 14;    // 水（くさった橋の下）の抵抗（1/s）
 const TILT_MAX = 22 * PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
