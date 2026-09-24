@@ -5,7 +5,7 @@
 // ---------- 決定的な数学 ----------
 // ゴーストを別の端末でも同じ動きで再生するため、物理では Math.sin/cos/hypot を使わない
 // （エンジンごとに最後の桁が違うことがあり、接触が絡むと数秒でずれる）。+ - * / sqrt だけで組む
-const PHYS_VERSION = 1;   // 物理やコースの数値を変えたら上げる（古いゴーストは捨てる）
+const PHYS_VERSION = 2;   // 物理やコースの数値を変えたら上げる（古いゴーストは捨てる）
 const PI = Math.PI, TWO_PI = PI * 2, HALF_PI = PI / 2;
 function wrapAngle(x) { if (x > PI || x < -PI) x -= TWO_PI * Math.floor((x + PI) / TWO_PI); return x; }
 function dsin(x) {
@@ -28,6 +28,7 @@ const MU = 1.0;           // 摩擦係数
 const POWER = 1.8;        // モータートルク = POWER × 全体重 × タイヤ半径
 const WMAX = 8;           // タイヤの回転上限（rad/s）
 const TUNNEL_H = 68;      // トンネルの天井高（地面から）
+const BLOCK_T = 45;       // トンネルの天井ブロックの厚み。パッドいっぱいの星や縦の棒なら上に乗って越えられる（裏技。test_overtop.js）
 const MUD_DRAG = 7;       // 泥の抵抗（1/s）
 const WATER_DRAG = 14;    // 水（くさった橋の下）の抵抗（1/s）
 const TILT_MAX = 22 * PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
@@ -98,10 +99,10 @@ function buildCourse(def) {
       case 'belt': flat(p.len, { belt: p.speed }); flat(60); break;
       case 'wall': flat(60); vert(-p.h); flat(100); break;
       case 'tunnel': { flat(40); const x0 = H.length * TSTEP, yc = y - TUNNEL_H; flat(p.len); const x1 = H.length * TSTEP;
-        TUNNELS.push({ x0, x1, yc, poly: [{ x: x0, y: yc - 400 }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: yc - 400 }] }); flat(160); break; }
+        TUNNELS.push(block(x0, x1, yc, BLOCK_T)); flat(160); break; }
       // もん: 段差（h）のすぐ上に低い天井（上の床から c）。登れる形で、かつ大きすぎないタイヤだけ通れる
       case 'gate': { flat(60); vert(-p.h); const x0 = H.length * TSTEP, yc = y - p.c; flat(p.len); const x1 = H.length * TSTEP;
-        TUNNELS.push({ x0, x1, yc, gate: true, poly: [{ x: x0, y: yc - 400 }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: yc - 400 }] }); flat(100); break; }
+        TUNNELS.push(Object.assign(block(x0, x1, yc, 400), { gate: true })); flat(100); break; }   // もんは越えられないまま
       // くさったはし: タイヤの半径（パッド座標）が limit を超えると板が抜けて、深さ d の水に落ちる（出口はスロープ）
       case 'bridge': { flat(40); const i0 = H.length - 1, deck = { bridge: true }; flat(p.len, deck); const i1 = H.length - 1;
         BRIDGES.push({ i0, i1, x0: i0 * TSTEP, x1: i1 * TSTEP, deckY: y, d: p.d, ramp: p.ramp || p.d * 2, limit: p.limit, deck, broken: false }); flat(40); break; }
@@ -151,6 +152,11 @@ function closestOnTerrain(c, px, py) {
   return { x: bx, y: by, d: Math.sqrt(best), i: bi };   // i: いちばん近い線分（面の属性はこれで引く）
 }
 
+// 天井ブロック: 厚み BLOCK_T の閉じた箱。下をくぐるのが正攻法、巨大なタイヤで上に乗って越えるのが裏技
+function block(x0, x1, yc, thick) {
+  const top = yc - thick;
+  return { x0, x1, yc, top, poly: [{ x: x0, y: top }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: top }, { x: x0, y: top }] };
+}
 function closestOnPoly(P, px, py) {
   let best = Infinity, bx = px, by = py;
   for (let i = 0; i < P.length - 1; i++) {
@@ -261,8 +267,8 @@ function applyContact(b, px, py, j, nx, ny, pen, surf) {
 function contact(c, b, px, py, j) {
   // トンネルの天井ブロック（側面にも当たる）
   for (const tn of c.TUNNELS) {
-    if (px < tn.x0 - 40 || px > tn.x1 + 40 || py - T - 4 > tn.yc) continue;
-    const inside = px > tn.x0 && px < tn.x1 && py < tn.yc;
+    if (px < tn.x0 - 40 || px > tn.x1 + 40 || py - T - 4 > tn.yc || py + T + 4 < tn.top) continue;
+    const inside = px > tn.x0 && px < tn.x1 && py < tn.yc && py > tn.top;
     const cp = closestOnPoly(tn.poly, px, py);
     const pen = inside ? cp.d + T : T - cp.d;
     if (pen <= 0) continue;

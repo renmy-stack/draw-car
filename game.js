@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '12';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '13';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -337,8 +337,10 @@ function render() {
   // トンネルの天井ブロック
   for (const tn of course.TUNNELS) {
     if (tn.x1 < camX - 20 || tn.x0 > camX + VIEW_W + 20) continue;
-    ctx.fillStyle = tn.gate ? '#6b6b7a' : def.dirt; ctx.fillRect(tn.x0, tn.yc - 400, tn.x1 - tn.x0, 400);
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3; ctx.strokeRect(tn.x0, tn.yc - 400, tn.x1 - tn.x0, 400);
+    const bh = tn.yc - tn.top;
+    ctx.fillStyle = tn.gate ? '#6b6b7a' : def.dirt; ctx.fillRect(tn.x0, tn.top, tn.x1 - tn.x0, bh);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3; ctx.strokeRect(tn.x0, tn.top, tn.x1 - tn.x0, bh);
+    if (!tn.gate) { ctx.fillStyle = def.ground; ctx.fillRect(tn.x0, tn.top - 2, tn.x1 - tn.x0, 6); }   // 上は草（乗れる）
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     for (let bx = tn.x0; bx < tn.x1; bx += 30) ctx.fillRect(bx + 4, tn.yc - 12, 22, 6);
   }
@@ -458,6 +460,10 @@ function showShareBox(dataUrl, text) {
 window.ff = sec => {
   if (state === 'replay') { const r = replay.runner, n = Math.round(sec / DT); for (let i = 0; i < n && !r.done; i++) stepRunner(r); camInit = false; return 'replay x=' + r.car.x.toFixed(0) + ' t=' + (r.k * DT).toFixed(2) + (r.done ? ' done' : ''); }
   if (state !== 'racing') return 'not racing'; const n = Math.round(sec / DT); for (let i = 0; i < n; i++) { stepCar(course, car, DT); raceTime += DT; stepK++; for (const g of ghosts) stepRunner(g.runner); if (car.x >= course.FINISH_X) { finish(); break; } } camInit = false; $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime); return state + ' x=' + car.x.toFixed(0) + ' t=' + raceTime.toFixed(2); };
+
+// 開発用: tp(x) で車をワールド座標 x に置く（見た目の確認用）。tunnels() でトンネルの位置
+window.tp = x => { car.x = x; car.y = terrain(course, x) - 70; car.vx = car.vy = 0; camInit = false; return 'x=' + x; };
+window.tunnels = () => course.TUNNELS.map(t => Math.round(t.x0) + '-' + Math.round(t.x1) + (t.gate ? ' もん' : ''));
 
 // ---------- 自動更新: Safari が古いページを開き続けるので、新しい版があれば読み直す ----------
 async function checkVersion() {
