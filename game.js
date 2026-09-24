@@ -2,7 +2,7 @@
 'use strict';
 const P = window.DrawCar;
 const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, resetCourse, terrain, makeCar, placeAtStart, transferState, stepCar,
-  PHYS_VERSION, makeRunner, stepRunner, idealEvents, encodeGhost, decodeGhost } = P;
+  PHYS_VERSION, makeRunner, stepRunner } = P;
 
 const VIEW_W = 560;                       // 画面に映る横幅（ワールド座標）
 const INK = '#23262b', PLAYER = '#e0413a', WINDOW = '#bfe9ff';
@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '7';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '8';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -25,8 +25,7 @@ let stroke = [], drawing = false;
 let finalTime = 0, isRecord = false;
 // ゴースト: レース開始からの物理ステップ番号 k とタイヤの差し替えイベントで走りを再現する
 let events = [], stepK = 0, ghosts = [], lastRun = null;
-const cpuCache = {};
-const GHOST_STYLE = { cpu: { label: 'おてほん', color: '#5a7fb0' }, best: { label: 'ベスト', color: '#e0a83a' }, rival: { label: 'ともだち', color: '#3aa76d' } };
+const GHOST_STYLE = { best: { label: 'ベスト', color: '#e0a83a' } };
 
 // ---------- 記録 ----------
 function loadBest(i) { try { const v = localStorage.getItem('drawcar.best.' + i); return v ? +v : null; } catch (e) { return null; } }
@@ -36,13 +35,10 @@ function loadGhost(key, i) {
   try { const g = JSON.parse(localStorage.getItem('drawcar.' + key + '.' + i)); return g && g.v === PHYS_VERSION && Array.isArray(g.events) ? g : null; } catch (e) { return null; }
 }
 function saveGhost(key, i, g) { try { localStorage.setItem('drawcar.' + key + '.' + i, JSON.stringify({ v: PHYS_VERSION, time: g.time, events: g.events })); } catch (e) {} }
-function cpuGhost(i) { if (!cpuCache[i]) cpuCache[i] = idealEvents(COURSES[i]); return cpuCache[i]; }
+// ゴーストは自己ベストだけ（おてほん・ともだちは 2026-09-24 にオーナー判断で外した。physics.js 側の仕組みは残してある）
 function ghostDefs(i) {
-  const list = [];
-  const cpu = cpuGhost(i); if (cpu.time) list.push({ kind: 'cpu', time: cpu.time, events: cpu.events });
-  const best = loadGhost('ghost', i); if (best) list.push({ kind: 'best', time: best.time, events: best.events });
-  const rival = loadGhost('rival', i); if (rival) list.push({ kind: 'rival', time: rival.time, events: rival.events });
-  return list;
+  const best = loadGhost('ghost', i);
+  return best ? [{ kind: 'best', time: best.time, events: best.events }] : [];
 }
 let toastTimer = 0;
 function toast(msg) {
@@ -400,8 +396,7 @@ function shareResult() {
   const bin = atob(dataUrl.split(',')[1]), buf = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
   const file = new File([buf], 'drawcar.png', { type: 'image/png' });
-  const ghostUrl = lastRun ? SITE_URL + '#g=' + encodeGhost({ course: courseIdx, time: lastRun.time, events: lastRun.events }) : SITE_URL;
-  const text = 'ドローカーレース コース' + (courseIdx + 1) + ' ' + def.name + '\nタイム : ' + fmt(finalTime) + '秒' + (isRecord ? '（じこベスト）' : '') + '\n\nこの走りに かてる？ ゴーストと たいせん\n' + ghostUrl + '\n#ドローカーレース';
+  const text = 'ドローカーレース コース' + (courseIdx + 1) + ' ' + def.name + '\nタイム : ' + fmt(finalTime) + '秒' + (isRecord ? '（じこベスト）' : '') + '\n\n' + SITE_URL + '\n#ドローカーレース';
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     navigator.share({ files: [file], text }).catch(() => {});
   } else if (navigator.share) {
@@ -430,15 +425,4 @@ checkVersion();
 // ---------- 開始 ----------
 selectCourse(0);
 drawPad();
-// URL の #g=... にゴーストが入っていたら、そのコースの「ともだち」として保存して開く
-(function importGhost() {
-  const m = /[#&]g=([A-Za-z0-9_-]+)/.exec(location.hash);
-  if (!m) return;
-  const g = decodeGhost(m[1]);
-  history.replaceState(null, '', location.pathname + location.search);
-  if (!g || g.course < 0 || g.course >= COURSES.length) { toast('ゴーストを よみこめませんでした（ゲームのバージョンが ちがいます）'); return; }
-  saveGhost('rival', g.course, g);
-  selectCourse(g.course);
-  toast('ともだちの ゴーストが とうちゃく！ コース' + (g.course + 1) + (g.time ? ' ' + fmt(g.time) + '秒' : '') + ' に かとう');
-})();
 requestAnimationFrame(frame);
