@@ -9,6 +9,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
+const VERSION = '6';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -368,6 +369,18 @@ function showShareBox(dataUrl, text) {
 
 // ---------- 開発用: ff(秒) で早送り ----------
 window.ff = sec => { if (state !== 'racing') return 'not racing'; const n = Math.round(sec / DT); for (let i = 0; i < n; i++) { stepCar(course, car, DT); raceTime += DT; if (car.x >= course.FINISH_X) { finish(); break; } } camInit = false; $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime); return state + ' x=' + car.x.toFixed(0) + ' t=' + raceTime.toFixed(2); };
+
+// ---------- 自動更新: Safari が古いページを開き続けるので、新しい版があれば読み直す ----------
+async function checkVersion() {
+  try {
+    const r = await fetch('version.txt?ts=' + Date.now(), { cache: 'no-store' });
+    const v = (await r.text()).trim();
+    if (v && v !== VERSION && state !== 'racing') location.reload();
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
+window.addEventListener('pageshow', e => { if (e.persisted) checkVersion(); });
+checkVersion();
 
 // ---------- 開始 ----------
 selectCourse(0);
