@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '11';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '12';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -18,7 +18,7 @@ const pad = $('pad'), pctx = pad.getContext('2d');
 
 let courseIdx = 0, course = null, car = null;
 let wheels = { rear: null, front: null };
-let state = 'idle';                        // idle | racing | result
+let state = 'idle';                        // idle | racing | result | replay
 let raceTime = 0, lastTs = 0, acc = 0, animT = 0;
 let camX = 0, camY = 0, camInit = false;
 let stroke = [], drawing = false;
@@ -26,6 +26,8 @@ let finalTime = 0, isRecord = false;
 // ゴースト: レース開始からの物理ステップ番号 k とタイヤの差し替えイベントで走りを再現する
 let events = [], stepK = 0, ghosts = [], lastRun = null, finishWheels = null;
 const GHOST_STYLE = { best: { label: 'ベスト', color: '#e0a83a' } };
+// ベストの鑑賞: ゴーストと同じ仕組み（makeRunner）で自己ベストを 1 台だけ走らせて、カメラで追う
+let replay = null, replayEi = -1;
 
 // ---------- 記録 ----------
 function loadBest(i) { try { const v = localStorage.getItem('drawcar.best.' + i); return v ? +v : null; } catch (e) { return null; } }
@@ -58,15 +60,21 @@ function selectCourse(i) {
   $('result').hidden = true;
   document.body.style.background = COURSES[i].sky[0];
   document.body.classList.toggle('dark', !!COURSES[i].dark);
-  updateButtons();
+  replay = null; drawPad(); updateButtons();
 }
 function hasWheels() { return !!(wheels.rear || wheels.front); }
 function updateButtons() {
+  const rp = state === 'replay';
   $('start').hidden = !(state === 'idle' && hasWheels());
   $('retry').hidden = state !== 'racing';
-  $('clear').hidden = state === 'racing' ? false : !hasWheels();
+  $('clear').hidden = rp ? true : state === 'racing' ? false : !hasWheels();
+  $('watch').hidden = !((state === 'idle' || (rp && replay.runner.done)) && loadGhost('ghost', courseIdx));
+  $('watch').textContent = rp ? 'もういちど みる' : '👀 ベストを みる';
+  $('rwatch').hidden = !loadGhost('ghost', courseIdx);
+  $('back').hidden = !rp;
   $('padhint').classList.toggle('hidden', hasWheels() || state !== 'idle');
-  $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime);
+  $('padwrap').classList.toggle('replay', rp);
+  $('timer').textContent = fmt(state === 'result' ? finalTime : rp ? replay.runner.k * DT : raceTime);
 }
 function startRace() {
   resetCourse(course);
@@ -80,7 +88,22 @@ function startRace() {
   updateButtons();
 }
 function replaceCar() {
-  car = transferState(car, makeCar(wheels));
+  // 0 ステップ目の描き足しは置き直し（ゴースト再生 makeRunner は k=0 のタイヤを全部つけてからスタートに置くので、それと同じにする）
+  if (stepK === 0) { car = makeCar(wheels); placeAtStart(course, car); }
+  else car = transferState(car, makeCar(wheels));
+}
+function startReplay() {
+  const g = loadGhost('ghost', courseIdx);
+  if (!g) return;
+  replay = { time: g.time, runner: makeRunner(COURSES[courseIdx], g.events) };
+  replayEi = -1; state = 'replay'; acc = 0; camInit = false; ghosts = [];
+  $('result').hidden = true;
+  drawPad(); updateButtons();
+}
+function endReplay() {
+  replay = null; state = 'idle'; raceTime = 0; camInit = false;
+  resetCourse(course); car = makeCar(wheels); placeAtStart(course, car);
+  drawPad(); updateButtons();
 }
 function finish() {
   state = 'result'; finalTime = raceTime;
@@ -140,12 +163,14 @@ function drawPad() {
     ctx.fillText(kind === 'rear' ? 'うしろ' : 'まえ', a.x, a.y + 40);
   }
   // 描いたタイヤ
-  ctx.strokeStyle = PLAYER; ctx.lineWidth = T * 2;
-  for (const k of ['rear', 'front']) if (wheels[k]) strokePath(ctx, wheels[k]);
+  const wv = state === 'replay' ? replay.runner.wheels : wheels;   // 鑑賞中はベストがいま使っているタイヤ
+  ctx.strokeStyle = state === 'replay' ? GHOST_STYLE.best.color : PLAYER; ctx.lineWidth = T * 2;
+  for (const k of ['rear', 'front']) if (wv[k]) strokePath(ctx, wv[k]);
   if (stroke.length) { ctx.strokeStyle = '#ff8a85'; strokePath(ctx, stroke); }
 }
 pad.addEventListener('pointerdown', e => {
   e.preventDefault();
+  if (state === 'replay') return;   // 鑑賞中は描けない
   drawing = true; stroke = [padPos(e)];
   try { pad.setPointerCapture(e.pointerId); } catch (err) {}
   drawPad();
@@ -204,6 +229,9 @@ onTap($('clear'), () => {
 });
 onTap($('again'), () => { if (hasWheels()) startRace(); else { state = 'idle'; $('result').hidden = true; updateButtons(); } });
 onTap($('next'), () => selectCourse((courseIdx + 1) % COURSES.length));
+onTap($('watch'), startReplay);
+onTap($('rwatch'), startReplay);
+onTap($('back'), () => { if (state === 'replay') endReplay(); });
 onTap($('share'), shareResult);
 onTap($('closeshare'), () => { $('sharebox').hidden = true; });
 onTap($('copy'), () => {
@@ -253,7 +281,10 @@ function drawCar(ctx, b, scale, color) {
   ctx.restore();
 }
 
+function curCourse() { return course; }
+function curCar() { return car; }
 function render() {
+  const rp = state === 'replay', course = rp ? replay.runner.course : curCourse(), car = rp ? replay.runner.car : curCar();
   const ctx = rctx, def = COURSES[courseIdx], scale = cw / VIEW_W, vh = ch / scale;
   const tx = car.x - VIEW_W * 0.32, ty = car.y - vh * 0.30;
   if (!camInit) { camX = tx; camY = ty; camInit = true; }
@@ -342,7 +373,11 @@ function render() {
     ctx.save(); ctx.globalAlpha = 0.85; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = g.color;
     ctx.fillText(g.label, gc.x, gc.y - 48); ctx.restore();
   }
-  drawCar(ctx, car, scale);
+  if (rp) {   // 鑑賞中はベストを はっきり描く
+    drawCar(ctx, car, scale, GHOST_STYLE.best.color);
+    ctx.save(); ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = INK;
+    ctx.fillText('ベスト ' + fmt(replay.time) + '秒', car.x, car.y - 66); ctx.restore();
+  } else drawCar(ctx, car, scale);
   ctx.restore();
 
   // ミニマップ（進行バー）
@@ -354,7 +389,7 @@ function render() {
     ctx.fillStyle = SEC_COLOR[s.type] || '#999'; ctx.fillRect(a, my, Math.max(1, b2 - a), mh);
   }
   const t = Math.min(Math.max((car.x - START_X) / total, 0), 1);
-  ctx.fillStyle = PLAYER; ctx.beginPath(); ctx.arc(mx + mw * t, my + mh / 2, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = rp ? GHOST_STYLE.best.color : PLAYER; ctx.beginPath(); ctx.arc(mx + mw * t, my + mh / 2, 6, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
 }
 
@@ -370,6 +405,13 @@ function frame(ts) {
       if (car.x >= course.FINISH_X) { finish(); break; }
     }
     $('timer').textContent = fmt(raceTime);
+  } else if (state === 'replay' && !replay.announced) {
+    const r = replay.runner;
+    acc += dt;
+    while (acc >= DT && !r.done) { stepRunner(r); acc -= DT; }
+    if (r.ei !== replayEi) { replayEi = r.ei; drawPad(); }   // 描き替えたらパッドにも出す
+    $('timer').textContent = fmt(r.done ? replay.time : r.k * DT);
+    if (r.done) { replay.announced = true; toast('ベスト ' + fmt(replay.time) + '秒 ゴール！'); updateButtons(); }
   }
   render();
   requestAnimationFrame(frame);
@@ -413,7 +455,9 @@ function showShareBox(dataUrl, text) {
 }
 
 // ---------- 開発用: ff(秒) で早送り ----------
-window.ff = sec => { if (state !== 'racing') return 'not racing'; const n = Math.round(sec / DT); for (let i = 0; i < n; i++) { stepCar(course, car, DT); raceTime += DT; stepK++; for (const g of ghosts) stepRunner(g.runner); if (car.x >= course.FINISH_X) { finish(); break; } } camInit = false; $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime); return state + ' x=' + car.x.toFixed(0) + ' t=' + raceTime.toFixed(2); };
+window.ff = sec => {
+  if (state === 'replay') { const r = replay.runner, n = Math.round(sec / DT); for (let i = 0; i < n && !r.done; i++) stepRunner(r); camInit = false; return 'replay x=' + r.car.x.toFixed(0) + ' t=' + (r.k * DT).toFixed(2) + (r.done ? ' done' : ''); }
+  if (state !== 'racing') return 'not racing'; const n = Math.round(sec / DT); for (let i = 0; i < n; i++) { stepCar(course, car, DT); raceTime += DT; stepK++; for (const g of ghosts) stepRunner(g.runner); if (car.x >= course.FINISH_X) { finish(); break; } } camInit = false; $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime); return state + ' x=' + car.x.toFixed(0) + ' t=' + raceTime.toFixed(2); };
 
 // ---------- 自動更新: Safari が古いページを開き続けるので、新しい版があれば読み直す ----------
 async function checkVersion() {

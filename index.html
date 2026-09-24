@@ -12,7 +12,7 @@
 <meta property="og:title" content="ドローカーレース">
 <meta property="og:description" content="タイヤを描いて、障害物コースを走らせよう。ゴールまでのタイムで勝負！">
 <title>ドローカーレース</title>
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 <canvas id="race"></canvas>
@@ -34,6 +34,8 @@
     <button id="clear" class="sub">けす</button>
     <button id="start" class="main" hidden>スタート</button>
     <button id="retry" class="sub" hidden>やりなおし</button>
+    <button id="watch" class="sub" hidden>👀 ベストを みる</button>
+    <button id="back" class="main" hidden>もどる</button>
   </div>
 </div>
 
@@ -48,6 +50,7 @@
       <button id="share" class="main">シェア</button>
       <button id="again" class="sub">もう一度</button>
       <button id="next" class="sub">つぎのコース</button>
+      <button id="rwatch" class="sub" hidden>👀 ベストを みる</button>
     </div>
   </div>
 </div>
@@ -66,7 +69,7 @@
   </div>
 </div>
 
-<script src="physics.js?v=11"></script>
-<script src="game.js?v=11"></script>
+<script src="physics.js?v=12"></script>
+<script src="game.js?v=12"></script>
 </body>
 </html>
