@@ -57,22 +57,28 @@ body.dark .cbtn.active { background: #fff; color: var(--ink); border-color: #fff
 }
 #padhint.hidden { display: none; }
 #padbtns { display: flex; gap: 8px; min-height: 40px; }
-#padbtns button, .rbtns button {
+#padbtns button, .rbtns button, .cbtn {
   border: 2px solid var(--ink); border-radius: 999px; padding: 8px 18px; font-weight: 700; font-size: 15px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 button.main { background: var(--ink); color: #fff; }
 button.sub { background: #fff; color: var(--ink); }
 button[hidden] { display: none !important; }
 
 /* リザルト・シェア */
-#result, #sharebox {
-  position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center;
-  padding-top: max(70px, calc(env(safe-area-inset-top) + 60px)); pointer-events: none;
+/* リザルトは画面全体を覆わず、パネルの大きさだけ置く（下のパッドはそのまま描ける）。
+   全画面の pointer-events:none の箱に入れると iOS Safari で最初のタップが効かなくなる */
+#result {
+  position: fixed; left: 50%; transform: translateX(-50%); width: min(88vw, 360px);
+  top: max(70px, calc(env(safe-area-inset-top) + 60px));
+}
+#sharebox {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .35);
 }
 #result[hidden], #sharebox[hidden] { display: none; }
-#sharebox { align-items: center; padding-top: 0; background: rgba(0, 0, 0, .35); }
 .panel {
-  pointer-events: auto; width: min(88vw, 360px); background: rgba(255, 255, 255, .96);
+  width: min(88vw, 360px); background: rgba(255, 255, 255, .96);
   border: 2px solid var(--ink); border-radius: 18px; padding: 18px 18px 16px; text-align: center; box-shadow: var(--shadow);
 }
 .rtitle { font-size: 26px; font-weight: 800; color: var(--player); }
