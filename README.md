@@ -30,7 +30,7 @@
 
 ## ファイル
 - `index.html` / `style.css` … 画面
-- `manifest.json` / `apple-touch-icon.png` / `icon-192.png` / `icon-512.png` … ホーム画面に追加したときのアイコン。`tools/icon.html` がゲームと同じ描き方で車を描く（`?dl` で PNG を落とし、180/192/512 に縮小）
+- `manifest.json` / `apple-touch-icon.png` / `icon-192.png` / `icon-512.png` … ホーム画面に追加したときのアイコン。`tools/icon.html` がゲームと同じ描き方で車を描く。書き出しはヘッドレス Chrome で `tools/icon.html?raw` を 1024×1024 で撮影し、180/192/512 に縮小（`?dl` のダウンロードは Chrome が連続ダウンロードを止めることがある）
 - `physics.js` … コース生成と物理（DOM に依存しない。Node でも動く）
 - `game.js` … 描画パッド・レース進行・シェア
 - `test_physics.js` … `node test_physics.js` で、代表的なタイヤ形ごとの完走可否とタイムを一覧

@@ -18,7 +18,7 @@ ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.moveTo(0, W);
 for (let x = 0; x <= W; x += 8) ctx.lineTo(x, W * 0.60 + Math.sin(x * 0.006) * 40 + Math.sin(x * 0.015) * 16);
 ctx.lineTo(W, W); ctx.closePath(); ctx.fill();
 // 車の配置: パッド座標 → アイコン座標
-const R = 27;                                   // タイヤ半径（パッド座標）
+const R = 21;                                   // タイヤ半径（パッド座標）
 const k = W * 0.84 / 190;                       // 車幅 180 + 少し
 const groundPad = AXLES.rear.y + R + 4;         // 地面（タイヤの下端）
 const ox = W / 2 - 150 * k, oy = W * 0.72 - groundPad * k;
@@ -49,5 +49,7 @@ ctx.fillStyle = WINDOW; ctx.fillRect(w0.x, w0.y, w1.x - w0.x, w1.y - w0.y);
 const hl = P({ x: 236, y: 80 }); ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(hl.x, hl.y, 3.5 * k, 0, Math.PI * 2); ctx.fill();
 // ハブ
 for (const a of Object.values(AXLES)) { const q = P(a); ctx.beginPath(); ctx.arc(q.x, q.y, 3.5 * k, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5 * k; ctx.stroke(); }
-if (/dl/.test(location.search)) cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'drawcar_icon2.png'; document.body.appendChild(a); a.click(); a.remove(); });
+// ?raw: キャンバスだけを 1024×1024 で表示（ヘッドレス Chrome の撮影用）
+if (/raw/.test(location.search)) { document.body.style.cssText = 'margin:0;padding:0;background:none;display:block'; cv.style.cssText = 'width:1024px;height:1024px;border-radius:0;display:block'; document.querySelector('div').remove(); }
+if (/dl/.test(location.search)) cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'drawcar_icon_r' + R + '.png'; document.body.appendChild(a); a.click(); a.remove(); });
 </script></body></html>
