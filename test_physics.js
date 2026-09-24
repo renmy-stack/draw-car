@@ -12,7 +12,7 @@ const SHAPES = {
 };
 const square = poly(60, 4);
 const BIG = circle(68), SMALL = circle(30);
-const BEST = { wall: square, gate: square, tunnel: SMALL };   // それ以外は 丸68（橋は 丸68 なら軽くて渡れる）
+const BEST = { wall: square, gate: square, tunnel: SMALL };   // それ以外は 丸68（橋は 半径 72 以下なら渡れる）
 // 区間に入るたびに最適な形へ描き替える「理想プレイ」
 function idealRun(c) {
   const mk = f => ({ rear: shape(AXLES.rear, f), front: shape(AXLES.front, f) });

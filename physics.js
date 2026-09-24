@@ -14,7 +14,7 @@ const POWER = 1.8;        // モータートルク = POWER × 全体重 × タ�
 const WMAX = 8;           // タイヤの回転上限（rad/s）
 const TUNNEL_H = 68;      // トンネルの天井高（地面から）
 const MUD_DRAG = 7;       // 泥の抵抗（1/s）
-const WATER_DRAG = 20;    // 水（くさった橋の下）の抵抗（1/s）
+const WATER_DRAG = 14;    // 水（くさった橋の下）の抵抗（1/s）
 const TILT_MAX = 22 * Math.PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
 const TILT_K = 30;        // 水平に戻るバネ（rad/s^2 per rad）
 const TILT_D = 3;         // 傾きの減衰（1/s）
@@ -22,32 +22,32 @@ const REACT = 1.0;        // モーター反力を車体に返す割合
 const START_X = 140;
 const SCALE = 0.56;       // パッド座標 → ワールド座標
 const PAD_W = 300, PAD_H = 180;
-const CHASSIS_CENTER = { x: 150, y: 100 };
-const AXLES = { rear: { x: 96, y: 122 }, front: { x: 204, y: 122 } };
+const CHASSIS_CENTER = { x: 150, y: 78 };
+const AXLES = { rear: { x: 96, y: 100 }, front: { x: 204, y: 100 } };   // 軸は y=100: 下に 80・上に 100 描ける
 // 車体の輪郭（パッド座標・時計回り・閉じる）
 const CHASSIS = [
-  { x: 60, y: 122 }, { x: 60, y: 96 }, { x: 78, y: 88 }, { x: 110, y: 84 }, { x: 128, y: 58 },
-  { x: 188, y: 58 }, { x: 208, y: 84 }, { x: 236, y: 92 }, { x: 240, y: 122 },
+  { x: 60, y: 100 }, { x: 60, y: 74 }, { x: 78, y: 66 }, { x: 110, y: 62 }, { x: 128, y: 36 },
+  { x: 188, y: 36 }, { x: 208, y: 62 }, { x: 236, y: 70 }, { x: 240, y: 100 },
 ];
 
 // ---------- コース定義 ----------
 const COURSES = [
   { name: 'はらっぱ', sky: ['#7fc8ff', '#dff4ff'], ground: '#58b26b', dirt: '#8a5a3a',
     sections: [
-      ['hills', { len: 700, amp: 36 }], ['bumps', { len: 400, amp: 8 }], ['bridge', { len: 560, d: 80, limit: 240 }], ['pits', { n: 2, w: 60, d: 28, gap: 120 }],
+      ['hills', { len: 700, amp: 36 }], ['bumps', { len: 400, amp: 8 }], ['bridge', { len: 560, d: 80, limit: 72 }], ['pits', { n: 2, w: 60, d: 28, gap: 120 }],
       ['wave', { len: 500, dh: 80 }], ['stairs', { n: 3, h: 30, gap: 110 }], ['tunnel', { len: 300 }], ['hills', { len: 500, amp: 30 }],
     ] },
   { name: 'とうげ', sky: ['#ff9a5c', '#ffe1b8'], ground: '#9ab55a', dirt: '#6e4a2e',
     sections: [
       ['bumps', { len: 300, amp: 10 }], ['hurdles', { n: 3, h: 22, w: 12, gap: 90 }], ['sawtooth', { n: 4, len: 90, h: 40 }],
-      ['ice', { len: 500, dh: -120 }], ['stairs', { n: 4, h: 34, gap: 90 }], ['bridge', { len: 560, d: 80, limit: 240 }], ['bigpit', { w: 100, d: 55 }], ['tunnel', { len: 300 }],
-      ['cliff', { dh: 120 }], ['gate', { h: 72, c: 120, len: 120 }], ['steep', { len: 220, dh: -100 }],
+      ['ice', { len: 500, dh: -120 }], ['stairs', { n: 4, h: 34, gap: 90 }], ['bridge', { len: 560, d: 80, limit: 72 }], ['bigpit', { w: 100, d: 55 }], ['tunnel', { len: 300 }],
+      ['cliff', { dh: 120 }], ['gate', { h: 72, c: 110, len: 120 }], ['steep', { len: 220, dh: -100 }],
     ] },
   { name: 'まよなか', sky: ['#1c2350', '#4a4f8f'], ground: '#4f7f8f', dirt: '#2f2a3f', dark: true,
     sections: [
-      ['wave', { len: 600, dh: 90 }], ['mud', { len: 400 }], ['bridge', { len: 560, d: 80, limit: 240 }], ['sawtooth', { n: 5, len: 80, h: 45 }], ['belt', { len: 420, speed: -180 }],
-      ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['tunnel', { len: 360 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['gate', { h: 72, c: 120, len: 120 }],
-      ['steep', { len: 200, dh: -110 }], ['cliff', { dh: 140 }], ['stairs', { n: 4, h: 36, gap: 90 }], ['ice', { len: 400, dh: -100 }], ['gate', { h: 72, c: 120, len: 120 }],
+      ['wave', { len: 600, dh: 90 }], ['mud', { len: 400 }], ['bridge', { len: 560, d: 80, limit: 72 }], ['sawtooth', { n: 5, len: 80, h: 45 }], ['belt', { len: 420, speed: -180 }],
+      ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['tunnel', { len: 360 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['gate', { h: 72, c: 110, len: 120 }],
+      ['steep', { len: 200, dh: -110 }], ['cliff', { dh: 140 }], ['stairs', { n: 4, h: 36, gap: 90 }], ['ice', { len: 400, dh: -100 }], ['gate', { h: 72, c: 110, len: 120 }],
     ] },
 ];
 const LABELS = { flat: 'たいら', hills: 'おか', bumps: 'でこぼこ', stairs: 'かいだん', wave: 'おおなみ', pits: 'みぞ',
@@ -87,7 +87,7 @@ function buildCourse(def) {
       // もん: 段差（h）のすぐ上に低い天井（上の床から c）。登れる形で、かつ大きすぎないタイヤだけ通れる
       case 'gate': { flat(60); vert(-p.h); const x0 = H.length * TSTEP, yc = y - p.c; flat(p.len); const x1 = H.length * TSTEP;
         TUNNELS.push({ x0, x1, yc, gate: true, poly: [{ x: x0, y: yc - 400 }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: yc - 400 }] }); flat(100); break; }
-      // くさったはし: 車の重さが limit を超えると板が抜けて、深さ d の水に落ちる（出口はスロープ）
+      // くさったはし: タイヤの半径（パッド座標）が limit を超えると板が抜けて、深さ d の水に落ちる（出口はスロープ）
       case 'bridge': { flat(40); const i0 = H.length - 1; flat(p.len, { bridge: true }); const i1 = H.length - 1;
         BRIDGES.push({ i0, i1, x0: i0 * TSTEP, x1: i1 * TSTEP, deckY: y, d: p.d, ramp: p.ramp || p.d * 2, limit: p.limit, broken: false }); flat(40); break; }
     }
@@ -182,11 +182,13 @@ function makeCar(wheels) {
     joints.push({ kind, ox: o.x, oy: o.y, mw, pts, line: st ? st.map(rel) : [], a: 0, w: 0, I, invI: pts.length ? 1 / I : 0, rad: jr + T, active: pts.length > 0 });
   }
   const cx = sx / m, cy = sy / m;          // 重心（CHASSIS_CENTER 基準）
+  let reach = 0;                           // いちばん大きいタイヤの半径（パッド座標。くさった橋の判定に使う）
+  for (const j of joints) reach = Math.max(reach, (j.rad - T) / SCALE);
   const chassisPts = chassisRaw.map(p => ({ x: p.x - cx, y: p.y - cy }));
   let Ib = 0;
   for (const p of chassisPts) Ib += mc * (p.x * p.x + p.y * p.y);
   for (const j of joints) { j.ox -= cx; j.oy -= cy; Ib += j.mw * (j.ox * j.ox + j.oy * j.oy); }
-  return { chassisPts, chassisLine: CHASSIS.map(tf), joints, m, invM: 1 / m, Ib, invIb: 1 / Ib, cx, cy,
+  return { chassisPts, chassisLine: CHASSIS.map(tf), joints, m, invM: 1 / m, Ib, invIb: 1 / Ib, cx, cy, reach,
     x: 0, y: 0, vx: 0, vy: 0, th: 0, om: 0, inMud: false, inWater: false, contacts: 0 };
 }
 // 車体ローカル座標 → ワールド座標
@@ -286,7 +288,7 @@ function stepCar(c, b, dt) {
   if (b.th > TILT_MAX) { b.th = TILT_MAX; if (b.om > 0) b.om = 0; }
   else if (b.th < -TILT_MAX) { b.th = -TILT_MAX; if (b.om < 0) b.om = 0; }
   b.inMud = false; b.inWater = false; b.contacts = 0;
-  for (const br of c.BRIDGES) if (!br.broken && b.m > br.limit && b.x > br.x0 - 20 && b.x < br.x1) breakBridge(c, br);   // 乗った瞬間に抜ける
+  for (const br of c.BRIDGES) if (!br.broken && b.reach > br.limit && b.x > br.x0 - 20 && b.x < br.x1) breakBridge(c, br);   // 乗った瞬間に抜ける
   const co = Math.cos(b.th), si = Math.sin(b.th);
   for (const v of b.chassisPts) contact(c, b, b.x + v.x * co - v.y * si, b.y + v.x * si + v.y * co, null);
   for (const j of b.joints) {

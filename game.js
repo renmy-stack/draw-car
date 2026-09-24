@@ -98,7 +98,7 @@ function drawPad() {
   // 車体のシルエット
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   chassisPath(ctx, CHASSIS); ctx.fillStyle = '#e9ecf2'; ctx.fill(); ctx.strokeStyle = '#c5c9d2'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.fillStyle = '#d9e6f2'; ctx.fillRect(136, 64, 46, 20);
+  ctx.fillStyle = '#d9e6f2'; ctx.fillRect(136, 42, 46, 20);
   // 軸のしるし
   for (const [kind, a] of Object.entries(AXLES)) {
     ctx.strokeStyle = '#9aa1ad'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
@@ -191,9 +191,9 @@ function drawCar(ctx, b, scale) {
   ctx.save(); ctx.translate(-b.cx, -b.cy);
   chassisPath(ctx, b.chassisLine); ctx.fillStyle = PLAYER; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
   const tf = p => ({ x: (p.x - CHASSIS_CENTER.x) * SCALE, y: (p.y - CHASSIS_CENTER.y) * SCALE });
-  const w0 = tf({ x: 136, y: 64 }), w1 = tf({ x: 182, y: 84 });
+  const w0 = tf({ x: 136, y: 42 }), w1 = tf({ x: 182, y: 62 });
   ctx.fillStyle = WINDOW; ctx.fillRect(w0.x, w0.y, w1.x - w0.x, w1.y - w0.y);
-  const hl = tf({ x: 236, y: 102 });
+  const hl = tf({ x: 236, y: 80 });
   ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(hl.x, hl.y, 3.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   // ハブ
