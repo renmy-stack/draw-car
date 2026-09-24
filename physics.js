@@ -14,6 +14,7 @@ const POWER = 1.8;        // モータートルク = POWER × 全体重 × タ�
 const WMAX = 8;           // タイヤの回転上限（rad/s）
 const TUNNEL_H = 68;      // トンネルの天井高（地面から）
 const MUD_DRAG = 7;       // 泥の抵抗（1/s）
+const WATER_DRAG = 20;    // 水（くさった橋の下）の抵抗（1/s）
 const TILT_MAX = 22 * Math.PI / 180;   // 車体の傾きの上限（転倒しない。かべ 72 を丸タイヤで越えられない上限）
 const TILT_K = 30;        // 水平に戻るバネ（rad/s^2 per rad）
 const TILT_D = 3;         // 傾きの減衰（1/s）
@@ -33,28 +34,28 @@ const CHASSIS = [
 const COURSES = [
   { name: 'はらっぱ', sky: ['#7fc8ff', '#dff4ff'], ground: '#58b26b', dirt: '#8a5a3a',
     sections: [
-      ['hills', { len: 700, amp: 36 }], ['bumps', { len: 400, amp: 8 }], ['pits', { n: 2, w: 60, d: 28, gap: 120 }],
+      ['hills', { len: 700, amp: 36 }], ['bumps', { len: 400, amp: 8 }], ['bridge', { len: 560, d: 80, limit: 240 }], ['pits', { n: 2, w: 60, d: 28, gap: 120 }],
       ['wave', { len: 500, dh: 80 }], ['stairs', { n: 3, h: 30, gap: 110 }], ['tunnel', { len: 300 }], ['hills', { len: 500, amp: 30 }],
     ] },
   { name: 'とうげ', sky: ['#ff9a5c', '#ffe1b8'], ground: '#9ab55a', dirt: '#6e4a2e',
     sections: [
       ['bumps', { len: 300, amp: 10 }], ['hurdles', { n: 3, h: 22, w: 12, gap: 90 }], ['sawtooth', { n: 4, len: 90, h: 40 }],
-      ['ice', { len: 500, dh: -120 }], ['stairs', { n: 4, h: 34, gap: 90 }], ['bigpit', { w: 100, d: 55 }], ['tunnel', { len: 300 }],
-      ['cliff', { dh: 120 }], ['wall', { h: 72 }], ['steep', { len: 220, dh: -100 }],
+      ['ice', { len: 500, dh: -120 }], ['stairs', { n: 4, h: 34, gap: 90 }], ['bridge', { len: 560, d: 80, limit: 240 }], ['bigpit', { w: 100, d: 55 }], ['tunnel', { len: 300 }],
+      ['cliff', { dh: 120 }], ['gate', { h: 72, c: 120, len: 120 }], ['steep', { len: 220, dh: -100 }],
     ] },
   { name: 'まよなか', sky: ['#1c2350', '#4a4f8f'], ground: '#4f7f8f', dirt: '#2f2a3f', dark: true,
     sections: [
-      ['wave', { len: 600, dh: 90 }], ['mud', { len: 400 }], ['sawtooth', { n: 5, len: 80, h: 45 }], ['belt', { len: 420, speed: -180 }],
-      ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['tunnel', { len: 360 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['wall', { h: 72 }],
-      ['steep', { len: 200, dh: -110 }], ['cliff', { dh: 140 }], ['stairs', { n: 4, h: 36, gap: 90 }], ['ice', { len: 400, dh: -100 }], ['wall', { h: 72 }],
+      ['wave', { len: 600, dh: 90 }], ['mud', { len: 400 }], ['bridge', { len: 560, d: 80, limit: 240 }], ['sawtooth', { n: 5, len: 80, h: 45 }], ['belt', { len: 420, speed: -180 }],
+      ['pits', { n: 3, w: 65, d: 30, gap: 110 }], ['tunnel', { len: 360 }], ['hurdles', { n: 4, h: 26, w: 12, gap: 80 }], ['gate', { h: 72, c: 120, len: 120 }],
+      ['steep', { len: 200, dh: -110 }], ['cliff', { dh: 140 }], ['stairs', { n: 4, h: 36, gap: 90 }], ['ice', { len: 400, dh: -100 }], ['gate', { h: 72, c: 120, len: 120 }],
     ] },
 ];
 const LABELS = { flat: 'たいら', hills: 'おか', bumps: 'でこぼこ', stairs: 'かいだん', wave: 'おおなみ', pits: 'みぞ',
   bigpit: 'おおみぞ', hurdles: 'ハードル', sawtooth: 'のこぎり', ice: 'こおり', cliff: 'がけ', steep: 'きゅうざか',
-  mud: 'どろ', belt: 'ベルト', wall: 'かべ', tunnel: 'トンネル' };
+  mud: 'どろ', belt: 'ベルト', wall: 'かべ', tunnel: 'トンネル', gate: 'もん', bridge: 'くさったはし' };
 
 function buildCourse(def) {
-  const H = [], SF = [], SECTIONS = [], TUNNELS = [];
+  const H = [], SF = [], SECTIONS = [], TUNNELS = [], BRIDGES = [];
   let y = 0;
   const push = (yy, sf) => { H.push(yy); SF.push(sf || null); };
   const seg = (len, f, sf) => { const n = Math.max(1, Math.round(len / TSTEP)), y0 = y; for (let i = 1; i <= n; i++) { y = y0 + f(i / n); push(y, sf); } };
@@ -83,6 +84,12 @@ function buildCourse(def) {
       case 'wall': flat(60); vert(-p.h); flat(100); break;
       case 'tunnel': { flat(40); const x0 = H.length * TSTEP, yc = y - TUNNEL_H; flat(p.len); const x1 = H.length * TSTEP;
         TUNNELS.push({ x0, x1, yc, poly: [{ x: x0, y: yc - 400 }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: yc - 400 }] }); flat(160); break; }
+      // もん: 段差（h）のすぐ上に低い天井（上の床から c）。登れる形で、かつ大きすぎないタイヤだけ通れる
+      case 'gate': { flat(60); vert(-p.h); const x0 = H.length * TSTEP, yc = y - p.c; flat(p.len); const x1 = H.length * TSTEP;
+        TUNNELS.push({ x0, x1, yc, gate: true, poly: [{ x: x0, y: yc - 400 }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: yc - 400 }] }); flat(100); break; }
+      // くさったはし: 車の重さが limit を超えると板が抜けて、深さ d の水に落ちる（出口はスロープ）
+      case 'bridge': { flat(40); const i0 = H.length - 1; flat(p.len, { bridge: true }); const i1 = H.length - 1;
+        BRIDGES.push({ i0, i1, x0: i0 * TSTEP, x1: i1 * TSTEP, deckY: y, d: p.d, ramp: p.ramp || p.d * 2, limit: p.limit, broken: false }); flat(40); break; }
     }
     SECTIONS.push({ type, label: LABELS[type], from, to: H.length * TSTEP });
   }
@@ -90,7 +97,24 @@ function buildCourse(def) {
   const FINISH_X = H.length * TSTEP;
   flat(320); vert(-400); flat(40);
   const TP = H.map((h, i) => ({ x: i * TSTEP, y: h }));
-  return { H, SF, TP, SECTIONS, TUNNELS, FINISH_X, LEN: H.length * TSTEP };
+  return { H, SF, TP, SECTIONS, TUNNELS, BRIDGES, FINISH_X, LEN: H.length * TSTEP };
+}
+// 橋を元に戻す（レース開始時に呼ぶ）
+function resetCourse(c) {
+  for (const br of c.BRIDGES) {
+    if (!br.broken) continue;
+    for (let i = br.i0 + 1; i < br.i1; i++) { c.H[i] = br.deckY; c.TP[i].y = br.deckY; c.SF[i] = { bridge: true }; }
+    br.broken = false;
+  }
+}
+function breakBridge(c, br) {
+  const ramp = br.ramp, water = { mud: true, water: true };
+  for (let i = br.i0 + 1; i < br.i1; i++) {
+    const x = i * TSTEP, toEnd = br.x1 - x;
+    const yy = br.deckY + (toEnd < ramp ? br.d * toEnd / ramp : br.d);
+    c.H[i] = yy; c.TP[i].y = yy; c.SF[i] = water;
+  }
+  br.broken = true; br.brokenAt = Date.now();
 }
 
 function terrainIndex(c, x) { return Math.min(Math.max(Math.floor(x / TSTEP), 0), c.H.length - 2); }
@@ -163,7 +187,7 @@ function makeCar(wheels) {
   for (const p of chassisPts) Ib += mc * (p.x * p.x + p.y * p.y);
   for (const j of joints) { j.ox -= cx; j.oy -= cy; Ib += j.mw * (j.ox * j.ox + j.oy * j.oy); }
   return { chassisPts, chassisLine: CHASSIS.map(tf), joints, m, invM: 1 / m, Ib, invIb: 1 / Ib, cx, cy,
-    x: 0, y: 0, vx: 0, vy: 0, th: 0, om: 0, inMud: false, contacts: 0 };
+    x: 0, y: 0, vx: 0, vy: 0, th: 0, om: 0, inMud: false, inWater: false, contacts: 0 };
 }
 // 車体ローカル座標 → ワールド座標
 function bodyPoint(b, lx, ly) {
@@ -215,6 +239,7 @@ function applyContact(b, px, py, j, nx, ny, pen, surf) {
   b.x += nx * corr; b.y += ny * corr;
   b.contacts++;
   if (surf && surf.mud) b.inMud = true;
+  if (surf && surf.water) b.inWater = true;
 }
 function contact(c, b, px, py, j) {
   // トンネルの天井ブロック（側面にも当たる）
@@ -260,7 +285,8 @@ function stepCar(c, b, dt) {
   b.th += b.om * dt;
   if (b.th > TILT_MAX) { b.th = TILT_MAX; if (b.om > 0) b.om = 0; }
   else if (b.th < -TILT_MAX) { b.th = -TILT_MAX; if (b.om < 0) b.om = 0; }
-  b.inMud = false; b.contacts = 0;
+  b.inMud = false; b.inWater = false; b.contacts = 0;
+  for (const br of c.BRIDGES) if (!br.broken && b.m > br.limit && b.x > br.x0 - 20 && b.x < br.x1) breakBridge(c, br);   // 乗った瞬間に抜ける
   const co = Math.cos(b.th), si = Math.sin(b.th);
   for (const v of b.chassisPts) contact(c, b, b.x + v.x * co - v.y * si, b.y + v.x * si + v.y * co, null);
   for (const j of b.joints) {
@@ -268,9 +294,9 @@ function stepCar(c, b, dt) {
     const cj = Math.cos(j.a), sj = Math.sin(j.a);
     for (const v of j.pts) contact(c, b, hx + v.x * cj - v.y * sj, hy + v.x * sj + v.y * cj, j);
   }
-  if (b.inMud) { b.vx *= 1 - MUD_DRAG * dt; for (const j of b.joints) j.w += (b.om - j.w) * 2 * dt; }
+  if (b.inMud) { b.vx *= 1 - (b.inWater ? WATER_DRAG : MUD_DRAG) * dt; for (const j of b.joints) j.w += (b.om - j.w) * 2 * dt; }
 }
 
 root.DrawCar = { TSTEP, DT, G, T, TUNNEL_H, START_X, SCALE, PAD_W, PAD_H, CHASSIS, CHASSIS_CENTER, AXLES, COURSES,
-  buildCourse, terrain, surfaceAt, samplePolyline, makeCar, placeAtStart, transferState, bodyPoint, stepCar };
+  buildCourse, resetCourse, terrain, surfaceAt, samplePolyline, makeCar, placeAtStart, transferState, bodyPoint, stepCar };
 })(typeof module !== 'undefined' ? module.exports : window);

@@ -1,12 +1,13 @@
 // ドローカーレース — 画面・入力・進行（物理は physics.js）
 'use strict';
 const P = window.DrawCar;
-const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, terrain, makeCar, placeAtStart, transferState, stepCar } = P;
+const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, resetCourse, terrain, makeCar, placeAtStart, transferState, stepCar } = P;
 
 const VIEW_W = 560;                       // 画面に映る横幅（ワールド座標）
 const INK = '#23262b', PLAYER = '#e0413a', WINDOW = '#bfe9ff';
 const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave: '#6cc1e0', pits: '#8a6a4a', bigpit: '#6e4a2e',
-  hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f' };
+  hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
+  gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
 
 const $ = id => document.getElementById(id);
@@ -49,6 +50,7 @@ function updateButtons() {
   $('timer').textContent = fmt(state === 'result' ? finalTime : raceTime);
 }
 function startRace() {
+  resetCourse(course);
   car = makeCar(wheels); placeAtStart(course, car);
   raceTime = 0; acc = 0; state = 'racing';
   $('result').hidden = true;
@@ -229,7 +231,7 @@ function render() {
   while (i < x1) {
     const sf = course.SF[i]; let k = i;
     while (k < x1 && course.SF[k] === sf) k++;
-    ctx.strokeStyle = sf && sf.ice ? '#cfefff' : sf && sf.mud ? '#5a3418' : sf && sf.belt ? '#3a3a3a' : def.ground;
+    ctx.strokeStyle = sf && sf.ice ? '#cfefff' : sf && sf.water ? '#3a8fd9' : sf && sf.mud ? '#5a3418' : sf && sf.belt ? '#3a3a3a' : sf && sf.bridge ? '#b8865a' : def.ground;
     ctx.beginPath(); ctx.moveTo(i * TSTEP, course.H[i]);
     for (let q = i + 1; q <= k; q++) ctx.lineTo(q * TSTEP, course.H[q]);
     ctx.stroke();
@@ -241,21 +243,36 @@ function render() {
       ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([2, 22]);
       ctx.beginPath(); ctx.moveTo(i * TSTEP, course.H[i] - 3); for (let q = i + 1; q <= k; q++) ctx.lineTo(q * TSTEP, course.H[q] - 3); ctx.stroke(); ctx.restore();
     }
+    if (sf && sf.bridge) {   // 板のつなぎ目と、下の空洞
+      ctx.save(); ctx.fillStyle = def.sky[1]; ctx.globalAlpha = 0.55; ctx.fillRect(i * TSTEP, course.H[i] + 5, (k - i) * TSTEP, 60); ctx.restore();
+      ctx.save(); ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 2; ctx.setLineDash([2, 18]);
+      ctx.beginPath(); ctx.moveTo(i * TSTEP, course.H[i]); ctx.lineTo(k * TSTEP, course.H[k]); ctx.stroke(); ctx.restore();
+    }
+    if (sf && sf.water) {    // 水面のゆれ
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.setLineDash([12, 20]); ctx.lineDashOffset = -animT * 40;
+      ctx.beginPath(); ctx.moveTo(i * TSTEP, course.H[i] - 3); for (let q = i + 1; q <= k; q++) ctx.lineTo(q * TSTEP, course.H[q] - 3); ctx.stroke(); ctx.restore();
+    }
     i = k;
   }
   // トンネルの天井ブロック
   for (const tn of course.TUNNELS) {
     if (tn.x1 < camX - 20 || tn.x0 > camX + VIEW_W + 20) continue;
-    ctx.fillStyle = def.dirt; ctx.fillRect(tn.x0, tn.yc - 400, tn.x1 - tn.x0, 400);
+    ctx.fillStyle = tn.gate ? '#6b6b7a' : def.dirt; ctx.fillRect(tn.x0, tn.yc - 400, tn.x1 - tn.x0, 400);
     ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3; ctx.strokeRect(tn.x0, tn.yc - 400, tn.x1 - tn.x0, 400);
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     for (let bx = tn.x0; bx < tn.x1; bx += 30) ctx.fillRect(bx + 4, tn.yc - 12, 22, 6);
+  }
+  // くさった橋が抜けた瞬間
+  for (const br of course.BRIDGES) {
+    if (!br.broken || !br.brokenAt || Date.now() - br.brokenAt > 1200) continue;
+    ctx.save(); ctx.font = 'bold 26px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = 4;
+    ctx.strokeText('バキッ!', br.x0 + 120, br.deckY - 50); ctx.fillText('バキッ!', br.x0 + 120, br.deckY - 50); ctx.restore();
   }
   // 区間ラベル
   ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   for (const s of course.SECTIONS) {
     if (s.from < camX - 100 || s.from > camX + VIEW_W + 20) continue;
-    const tn = s.type === 'tunnel' ? course.TUNNELS.find(t => t.x0 >= s.from && t.x0 < s.to) : null;
+    const tn = s.type === 'tunnel' || s.type === 'gate' ? course.TUNNELS.find(t => t.x0 >= s.from && t.x0 < s.to) : null;
     const gy = tn ? tn.yc - 20 : terrain(course, s.from + 6) - 16;
     ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText(s.label, (tn ? tn.x0 : s.from) + 6, gy);
   }

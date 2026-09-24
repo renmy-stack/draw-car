@@ -1,6 +1,6 @@
 // node test_physics.js [制限秒] — 代表的なタイヤで3コースを走らせ、タイムを出す（git 管理外の開発用）
 const { DrawCar } = require('./physics.js');
-const { COURSES, AXLES, buildCourse, makeCar, placeAtStart, transferState, stepCar, DT } = DrawCar;
+const { COURSES, AXLES, buildCourse, resetCourse, makeCar, placeAtStart, transferState, stepCar, DT } = DrawCar;
 const shape = (axle, f) => f.map(p => ({ x: axle.x + p.x, y: axle.y + p.y }));
 const circle = (r, n = 40) => Array.from({ length: n + 1 }, (_, i) => ({ x: Math.cos(i / n * 2 * Math.PI) * r, y: Math.sin(i / n * 2 * Math.PI) * r }));
 const poly = (r, k) => Array.from({ length: k + 1 }, (_, i) => ({ x: Math.cos(i / k * 2 * Math.PI) * r, y: Math.sin(i / k * 2 * Math.PI) * r }));
@@ -12,17 +12,19 @@ const SHAPES = {
 };
 const square = poly(60, 4);
 const BIG = circle(68), SMALL = circle(30);
-const BEST = { wall: square, tunnel: SMALL };   // それ以外は 丸68
+const BEST = { wall: square, gate: square, tunnel: SMALL };   // それ以外は 丸68（橋は 丸68 なら軽くて渡れる）
 // 区間に入るたびに最適な形へ描き替える「理想プレイ」
 function idealRun(c) {
   const mk = f => ({ rear: shape(AXLES.rear, f), front: shape(AXLES.front, f) });
+  resetCourse(c);
   let cur = null, b = null, t = 0;
   const sw = f => { const nb = makeCar(mk(f)); if (b) transferState(b, nb); else placeAtStart(c, nb); b = nb; cur = f; };
   sw(BIG);
   while (t < 120 && b.x < c.FINISH_X) {
     const s = c.SECTIONS.find(s => b.x + 40 >= s.from && b.x + 40 < s.to);
     let want = (s && BEST[s.type]) || BIG;
-    if (c.TUNNELS.some(tn => b.x - 90 < tn.x1 && b.x + 50 > tn.x0)) want = SMALL;   // トンネルを抜けきるまでは小さいまま
+    const tn = c.TUNNELS.find(tn => b.x - 90 < tn.x1 && b.x + 50 > tn.x0);
+    if (tn) want = tn.gate ? square : SMALL;   // トンネル/もん を抜けきるまでは その形のまま
     if (want !== cur) sw(want);
     stepCar(c, b, DT); t += DT;
   }
@@ -36,6 +38,7 @@ for (let ci = 0; ci < COURSES.length; ci++) {
   for (const [name, f] of Object.entries(SHAPES)) {
     const wheels = f ? { rear: shape(AXLES.rear, f), front: shape(AXLES.front, f) }
                      : { rear: shape(AXLES.rear, circle(68)), front: null };
+    resetCourse(c);
     const b = makeCar(wheels); placeAtStart(c, b);
     let t = 0, maxX = 0, stuckAt = '';
     while (t < limit) { stepCar(c, b, DT); t += DT; maxX = Math.max(maxX, b.x); if (b.x >= c.FINISH_X) break; }
