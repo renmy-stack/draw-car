@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>アイコン生成</title>
+<style>body{margin:0;background:#333;display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px;color:#fff;font-family:sans-serif}canvas{width:512px;height:512px;border-radius:110px}</style>
+</head><body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<div>ゲームと同じ描き方で車を描いたアイコン（?dl で自動ダウンロード）</div>
+<script src="../physics.js"></script>
+<script>
+// ゲーム（game.js）と同じ見た目: 車体の輪郭 CHASSIS、窓、ヘッドライト、ハブ、太い黒線のタイヤ
+const { CHASSIS, AXLES } = window.DrawCar;
+const INK = '#23262b', PLAYER = '#e0413a', WINDOW = '#bfe9ff';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), W = 1024;
+// 空（コース1 の色）
+const sky = ctx.createLinearGradient(0, 0, 0, W); sky.addColorStop(0, '#7fc8ff'); sky.addColorStop(1, '#dff4ff');
+ctx.fillStyle = sky; ctx.fillRect(0, 0, W, W);
+// 遠景の丘（ゲームと同じ白い波）
+ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.moveTo(0, W);
+for (let x = 0; x <= W; x += 8) ctx.lineTo(x, W * 0.60 + Math.sin(x * 0.006) * 40 + Math.sin(x * 0.015) * 16);
+ctx.lineTo(W, W); ctx.closePath(); ctx.fill();
+// 車の配置: パッド座標 → アイコン座標
+const R = 42;                                   // タイヤ半径（パッド座標）
+const k = W * 0.84 / 190;                       // 車幅 180 + 少し
+const groundPad = AXLES.rear.y + R + 4;         // 地面（タイヤの下端）
+const ox = W / 2 - 150 * k, oy = W * 0.72 - groundPad * k;
+const P = p => ({ x: ox + p.x * k, y: oy + p.y * k });
+// 地面
+const gy = oy + groundPad * k;
+ctx.fillStyle = '#8a5a3a'; ctx.fillRect(0, gy, W, W - gy);
+ctx.strokeStyle = '#58b26b'; ctx.lineWidth = 9 * k * 0.55; ctx.lineCap = 'round';
+ctx.beginPath(); ctx.moveTo(-20, gy); ctx.lineTo(W + 20, gy); ctx.stroke();
+ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+// タイヤ（手描きのように少し揺れた 1 本の線。ゲームの線の太さ T*2 = 8）
+function tire(axle, seed) {
+  ctx.strokeStyle = INK; ctx.lineWidth = 8 * k; ctx.beginPath();
+  const n = 64;
+  for (let i = 0; i <= n + 4; i++) {
+    const t = i / n * Math.PI * 2 + seed, w = 1 + 0.025 * Math.sin(3 * t + seed) + 0.012 * Math.sin(7 * t);
+    const p = P({ x: axle.x + Math.cos(t) * R * w, y: axle.y + Math.sin(t) * R * w });
+    i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+  }
+  ctx.stroke();
+}
+tire(AXLES.rear, 0.4); tire(AXLES.front, 2.1);
+// 車体
+ctx.beginPath(); CHASSIS.forEach((p, i) => { const q = P(p); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); }); ctx.closePath();
+ctx.fillStyle = PLAYER; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2 * k; ctx.stroke();
+const w0 = P({ x: 136, y: 42 }), w1 = P({ x: 182, y: 62 });
+ctx.fillStyle = WINDOW; ctx.fillRect(w0.x, w0.y, w1.x - w0.x, w1.y - w0.y);
+const hl = P({ x: 236, y: 80 }); ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(hl.x, hl.y, 3.5 * k, 0, Math.PI * 2); ctx.fill();
+// ハブ
+for (const a of Object.values(AXLES)) { const q = P(a); ctx.beginPath(); ctx.arc(q.x, q.y, 3.5 * k, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5 * k; ctx.stroke(); }
+if (/dl/.test(location.search)) cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'drawcar_icon2.png'; document.body.appendChild(a); a.click(); a.remove(); });
+</script></body></html>
