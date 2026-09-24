@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '10';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '11';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
@@ -24,7 +24,7 @@ let camX = 0, camY = 0, camInit = false;
 let stroke = [], drawing = false;
 let finalTime = 0, isRecord = false;
 // ゴースト: レース開始からの物理ステップ番号 k とタイヤの差し替えイベントで走りを再現する
-let events = [], stepK = 0, ghosts = [], lastRun = null;
+let events = [], stepK = 0, ghosts = [], lastRun = null, finishWheels = null;
 const GHOST_STYLE = { best: { label: 'ベスト', color: '#e0a83a' } };
 
 // ---------- 記録 ----------
@@ -54,7 +54,7 @@ function selectCourse(i) {
   document.querySelectorAll('.cbtn').forEach(b => b.classList.toggle('active', +b.dataset.c === i));
   $('cname-text').textContent = 'コース' + (i + 1) + ' ' + COURSES[i].name;
   const best = loadBest(i);
-  $('cbest').textContent = (best ? 'ベスト ' + fmt(best) + '秒' : 'まだ きろくなし') + '  v' + VERSION;
+  $('cbest').textContent = best ? 'ベスト ' + fmt(best) + '秒' : 'まだ きろくなし';
   $('result').hidden = true;
   document.body.style.background = COURSES[i].sky[0];
   document.body.classList.toggle('dark', !!COURSES[i].dark);
@@ -87,6 +87,7 @@ function finish() {
   const best = loadBest(courseIdx);
   isRecord = !best || finalTime < best;
   lastRun = { time: finalTime, events: events.slice() };
+  finishWheels = { rear: wheels.rear, front: wheels.front };   // シェア画像用（リザルト中に描き直しても、走ったタイヤを出す）
   if (isRecord) saveBest(courseIdx, finalTime);
   if (isRecord || !loadGhost('ghost', courseIdx)) saveGhost('ghost', courseIdx, lastRun);   // ゴーストが無ければ記録でなくても保存
   $('rghosts').innerHTML = ghosts.length ? '' : '<div>つぎのレースから この走りが「ベスト」として いっしょに走ります</div>';
@@ -175,7 +176,7 @@ function endStroke(e) {
   drawPad(); updateButtons();
 }
 pad.addEventListener('pointerup', endStroke);
-pad.addEventListener('pointercancel', endStroke);
+pad.addEventListener('pointercancel', e => { try { pad.releasePointerCapture(e.pointerId); } catch (err) {} drawing = false; stroke = []; drawPad(); });   // OS に奪われた線は使わない
 pad.addEventListener('pointerleave', e => { if (drawing && !pad.hasPointerCapture?.(e.pointerId)) endStroke(); });
 
 // ---------- ボタン ----------
@@ -389,7 +390,7 @@ function shareResult() {
   g.font = 'bold 64px sans-serif'; g.fillText(fmt(finalTime) + ' 秒', W / 2, 160);
   if (isRecord) { g.fillStyle = PLAYER; g.font = 'bold 20px sans-serif'; g.fillText('じこベスト こうしん！', W / 2, 190); }
   // 車（大きく）
-  const b = makeCar(wheels); let low = -Infinity;
+  const b = makeCar(finishWheels || wheels); let low = -Infinity;
   for (const p of b.chassisPts) low = Math.max(low, p.y);
   for (const j of b.joints) for (const p of j.pts) low = Math.max(low, j.oy + p.y);
   b.x = 0; b.y = 0;
@@ -400,10 +401,11 @@ function shareResult() {
   for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
   const file = new File([buf], 'drawcar.png', { type: 'image/png' });
   const text = 'ドローカーレース コース' + (courseIdx + 1) + ' ' + def.name + '\nタイム : ' + fmt(finalTime) + '秒' + (isRecord ? '（じこベスト）' : '') + '\n\n' + SITE_URL + '\n#ドローカーレース';
+  const fallback = err => { if (!err || err.name !== 'AbortError') showShareBox(dataUrl, text); };   // ユーザーの取り消し以外は画面で見せる
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], text }).catch(() => {});
+    navigator.share({ files: [file], text }).catch(fallback);
   } else if (navigator.share) {
-    navigator.share({ text }).catch(() => showShareBox(dataUrl, text));
+    navigator.share({ text }).catch(fallback);
   } else showShareBox(dataUrl, text);
 }
 function showShareBox(dataUrl, text) {
@@ -418,7 +420,7 @@ async function checkVersion() {
   try {
     const r = await fetch('version.txt?ts=' + Date.now(), { cache: 'no-store' });
     const v = (await r.text()).trim();
-    if (v && v !== VERSION && state !== 'racing') {
+    if (v && v !== VERSION && state === 'idle') {
       let tried = ''; try { tried = sessionStorage.getItem('drawcar.reloadFor') || ''; } catch (e) {}
       if (tried === v) return;   // すでにこの版のために読み直した（配信側がまだ古い）。空回りしない
       try { sessionStorage.setItem('drawcar.reloadFor', v); } catch (e) {}

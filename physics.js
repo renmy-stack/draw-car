@@ -103,8 +103,8 @@ function buildCourse(def) {
       case 'gate': { flat(60); vert(-p.h); const x0 = H.length * TSTEP, yc = y - p.c; flat(p.len); const x1 = H.length * TSTEP;
         TUNNELS.push({ x0, x1, yc, gate: true, poly: [{ x: x0, y: yc - 400 }, { x: x0, y: yc }, { x: x1, y: yc }, { x: x1, y: yc - 400 }] }); flat(100); break; }
       // くさったはし: タイヤの半径（パッド座標）が limit を超えると板が抜けて、深さ d の水に落ちる（出口はスロープ）
-      case 'bridge': { flat(40); const i0 = H.length - 1; flat(p.len, { bridge: true }); const i1 = H.length - 1;
-        BRIDGES.push({ i0, i1, x0: i0 * TSTEP, x1: i1 * TSTEP, deckY: y, d: p.d, ramp: p.ramp || p.d * 2, limit: p.limit, broken: false }); flat(40); break; }
+      case 'bridge': { flat(40); const i0 = H.length - 1, deck = { bridge: true }; flat(p.len, deck); const i1 = H.length - 1;
+        BRIDGES.push({ i0, i1, x0: i0 * TSTEP, x1: i1 * TSTEP, deckY: y, d: p.d, ramp: p.ramp || p.d * 2, limit: p.limit, deck, broken: false }); flat(40); break; }
     }
     SECTIONS.push({ type, label: LABELS[type], from, to: H.length * TSTEP });
   }
@@ -118,7 +118,7 @@ function buildCourse(def) {
 function resetCourse(c) {
   for (const br of c.BRIDGES) {
     if (!br.broken) continue;
-    for (let i = br.i0 + 1; i < br.i1; i++) { c.H[i] = br.deckY; c.TP[i].y = br.deckY; c.SF[i] = { bridge: true }; }
+    for (let i = br.i0 + 1; i < br.i1; i++) { c.H[i] = br.deckY; c.TP[i].y = br.deckY; c.SF[i] = br.deck; }
     br.broken = false;
   }
 }
