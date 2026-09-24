@@ -123,7 +123,8 @@ pad.addEventListener('pointermove', e => {
   const p = padPos(e), last = stroke[stroke.length - 1];
   if (Math.hypot(p.x - last.x, p.y - last.y) > 3) { stroke.push(p); drawPad(); }
 });
-function endStroke() {
+function endStroke(e) {
+  if (e && e.pointerId != null) { try { pad.releasePointerCapture(e.pointerId); } catch (err) {} }
   if (!drawing) return;
   drawing = false;
   if (stroke.length >= 3) {
@@ -145,20 +146,33 @@ pad.addEventListener('pointercancel', endStroke);
 pad.addEventListener('pointerleave', e => { if (drawing && !pad.hasPointerCapture?.(e.pointerId)) endStroke(); });
 
 // ---------- ボタン ----------
-document.querySelectorAll('.cbtn').forEach(b => b.addEventListener('click', () => selectCourse(+b.dataset.c)));
-$('start').addEventListener('click', () => { if (state === 'idle' && hasWheels()) startRace(); });
-$('retry').addEventListener('click', () => { if (state === 'racing') startRace(); });
-$('clear').addEventListener('click', () => {
+// ボタン: iOS Safari で click が 1 回目に届かないことがあるので、pointerup でも反応させる（二重起動は時間で防ぐ）
+const DEBUG = /debug/.test(location.search);
+const dbg = DEBUG ? Object.assign(document.body.appendChild(document.createElement('div')), { id: 'dbg' }) : null;
+if (dbg) dbg.style.cssText = 'position:fixed;left:8px;bottom:60px;z-index:99;background:#000;color:#0f0;font:12px monospace;padding:4px 6px;pointer-events:none;white-space:pre';
+const dbgCount = {};
+function dbgLog(name, ev) { if (!dbg) return; const k = name + ':' + ev; dbgCount[k] = (dbgCount[k] || 0) + 1; dbg.textContent = Object.entries(dbgCount).map(([a, b]) => a + '=' + b).join(' | '); }
+function onTap(el, fn) {
+  let last = 0;
+  const run = (e, kind) => { dbgLog(el.id || el.className, kind); if (Date.now() - last < 700) return; last = Date.now(); fn(e); };
+  el.addEventListener('pointerdown', e => dbgLog(el.id || el.className, 'pd'));
+  el.addEventListener('pointerup', e => { if (e.pointerType === 'mouse' && e.button !== 0) return; run(e, 'pu'); });
+  el.addEventListener('click', e => run(e, 'ck'));
+}
+document.querySelectorAll('.cbtn').forEach(b => onTap(b, () => selectCourse(+b.dataset.c)));
+onTap($('start'), () => { if (state === 'idle' && hasWheels()) startRace(); });
+onTap($('retry'), () => { if (state === 'racing') startRace(); });
+onTap($('clear'), () => {
   wheels = { rear: null, front: null };
   if (state === 'racing') { state = 'idle'; raceTime = 0; }
   car = makeCar(wheels); placeAtStart(course, car);
   drawPad(); updateButtons();
 });
-$('again').addEventListener('click', () => { if (hasWheels()) startRace(); else { state = 'idle'; $('result').hidden = true; updateButtons(); } });
-$('next').addEventListener('click', () => selectCourse((courseIdx + 1) % COURSES.length));
-$('share').addEventListener('click', shareResult);
-$('closeshare').addEventListener('click', () => { $('sharebox').hidden = true; });
-$('copy').addEventListener('click', () => {
+onTap($('again'), () => { if (hasWheels()) startRace(); else { state = 'idle'; $('result').hidden = true; updateButtons(); } });
+onTap($('next'), () => selectCourse((courseIdx + 1) % COURSES.length));
+onTap($('share'), shareResult);
+onTap($('closeshare'), () => { $('sharebox').hidden = true; });
+onTap($('copy'), () => {
   const ta = $('sharetext');
   const done = () => { $('copy').textContent = 'コピーした！'; setTimeout(() => { $('copy').textContent = '文をコピー'; }, 1500); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); });
