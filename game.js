@@ -1,7 +1,7 @@
 // ドローカーレース — 画面・入力・進行（物理は physics.js）
 'use strict';
 const P = window.DrawCar;
-const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, terrain, makeCar, placeAtStart, transferState, stepCar, clampWheel } = P;
+const { PAD_W, PAD_H, AXLES, CHASSIS, CHASSIS_CENTER, SCALE, T, START_X, TSTEP, COURSES, DT, buildCourse, terrain, makeCar, placeAtStart, transferState, stepCar } = P;
 
 const VIEW_W = 560;                       // 画面に映る横幅（ワールド座標）
 const INK = '#23262b', PLAYER = '#e0413a', WINDOW = '#bfe9ff';
@@ -130,7 +130,7 @@ function endStroke() {
     for (const p of stroke) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     const kind = Math.hypot(cx - AXLES.rear.x, cy - AXLES.rear.y) <= Math.hypot(cx - AXLES.front.x, cy - AXLES.front.y) ? 'rear' : 'front';
-    wheels[kind] = clampWheel(stroke, AXLES[kind]);
+    wheels[kind] = stroke;
     if (state === 'idle') startRace();
     else if (state === 'racing') replaceCar();
     // リザルト表示中は次のレース用に描くだけ

@@ -21,7 +21,6 @@ const REACT = 1.0;        // モーター反力を車体に返す割合
 const START_X = 140;
 const SCALE = 0.56;       // パッド座標 → ワールド座標
 const PAD_W = 300, PAD_H = 180;
-const MAX_WHEEL_R = 68;   // タイヤの最大半径（パッド座標）
 const CHASSIS_CENTER = { x: 150, y: 100 };
 const AXLES = { rear: { x: 96, y: 122 }, front: { x: 204, y: 122 } };
 // 車体の輪郭（パッド座標・時計回り・閉じる）
@@ -137,14 +136,6 @@ function samplePolyline(pts, spacing) {
     carry = d - (t - spacing);
   }
   return out;
-}
-// タイヤを軸まわりに最大半径へ収める（パッド座標）
-function clampWheel(stroke, axle) {
-  let r = 0;
-  for (const p of stroke) r = Math.max(r, Math.hypot(p.x - axle.x, p.y - axle.y));
-  if (r <= MAX_WHEEL_R) return stroke;
-  const k = MAX_WHEEL_R / r;
-  return stroke.map(p => ({ x: axle.x + (p.x - axle.x) * k, y: axle.y + (p.y - axle.y) * k }));
 }
 // wheels: { rear: 線 | null, front: 線 | null }（パッド座標）
 // 車体の座標系: 原点は重心（b.x, b.y）。b.cx, b.cy は CHASSIS_CENTER 基準で見た重心の位置（描画用）
@@ -280,6 +271,6 @@ function stepCar(c, b, dt) {
   if (b.inMud) { b.vx *= 1 - MUD_DRAG * dt; for (const j of b.joints) j.w += (b.om - j.w) * 2 * dt; }
 }
 
-root.DrawCar = { TSTEP, DT, G, T, TUNNEL_H, START_X, SCALE, PAD_W, PAD_H, MAX_WHEEL_R, CHASSIS, CHASSIS_CENTER, AXLES, COURSES,
-  buildCourse, terrain, surfaceAt, samplePolyline, clampWheel, makeCar, placeAtStart, transferState, bodyPoint, stepCar };
+root.DrawCar = { TSTEP, DT, G, T, TUNNEL_H, START_X, SCALE, PAD_W, PAD_H, CHASSIS, CHASSIS_CENTER, AXLES, COURSES,
+  buildCourse, terrain, surfaceAt, samplePolyline, makeCar, placeAtStart, transferState, bodyPoint, stepCar };
 })(typeof module !== 'undefined' ? module.exports : window);

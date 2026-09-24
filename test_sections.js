@@ -1,6 +1,6 @@
 // node test_sections.js — 区間ごとに、どの形のタイヤが通れるかを表にする（開発用）
 const { DrawCar } = require('./physics.js');
-const { AXLES, buildCourse, makeCar, placeAtStart, stepCar, clampWheel, DT } = DrawCar;
+const { AXLES, buildCourse, makeCar, placeAtStart, stepCar, DT } = DrawCar;
 const shape = (axle, f) => f.map(p => ({ x: axle.x + p.x, y: axle.y + p.y }));
 const circle = (r, n = 40) => Array.from({ length: n + 1 }, (_, i) => ({ x: Math.cos(i / n * 2 * Math.PI) * r, y: Math.sin(i / n * 2 * Math.PI) * r }));
 const poly = (r, k) => Array.from({ length: k + 1 }, (_, i) => ({ x: Math.cos(i / k * 2 * Math.PI) * r, y: Math.sin(i / k * 2 * Math.PI) * r }));
@@ -22,7 +22,7 @@ for (const sec of SECTIONS) {
   const c = buildCourse({ sections: [sec] });
   let row = (sec[0] + ' ' + JSON.stringify(sec[1])).padEnd(26);
   for (const f of Object.values(SHAPES)) {
-    const wheels = { rear: clampWheel(shape(AXLES.rear, f), AXLES.rear), front: clampWheel(shape(AXLES.front, f), AXLES.front) };
+    const wheels = { rear: shape(AXLES.rear, f), front: shape(AXLES.front, f) };
     const b = makeCar(wheels); placeAtStart(c, b);
     let t = 0; while (t < limit && b.x < c.FINISH_X) { stepCar(c, b, DT); t += DT; }
     row += (b.x >= c.FINISH_X ? t.toFixed(1) + 's' : '  x  ').padEnd(9);
