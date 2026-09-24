@@ -10,7 +10,7 @@ const SEC_COLOR = { hills: '#7bc67e', bumps: '#a8d08d', stairs: '#e0b04a', wave:
   hurdles: '#e07a4a', sawtooth: '#c9a227', ice: '#9fdcff', cliff: '#8f8f8f', steep: '#b05c5c', mud: '#6b3f1f', belt: '#555', wall: '#444', tunnel: '#2f2a3f',
   gate: '#6b6b7a', bridge: '#b8865a' };
 const SITE_URL = 'https://renmy-stack.github.io/draw-car/';
-const VERSION = '13';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
+const VERSION = '14';   // version.txt と合わせる。更新したら index.html の ?v= も上げる
 
 const $ = id => document.getElementById(id);
 const race = $('race'), rctx = race.getContext('2d');
